@@ -1,0 +1,25 @@
+version: "3.9"
+services:
+  backend:
+    build:
+      context: /Users/marina/data
+      dockerfile: backend/Dockerfile
+    container_name: data-orchestrator-backend
+    ports:
+      - "8000:8000"
+    environment:
+      - UVICORN_WORKERS=1
+    restart: unless-stopped
+
+  frontend:
+    build:
+      context: /Users/marina/data
+      dockerfile: frontend/Dockerfile
+    container_name: data-orchestrator-frontend
+    depends_on:
+      - backend
+    ports:
+      - "3000:3000"
+    restart: unless-stopped
+
+
