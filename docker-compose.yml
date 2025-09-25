@@ -1,4 +1,3 @@
-version: "3.9"
 services:
   backend:
     build:
@@ -13,13 +12,15 @@ services:
 
   frontend:
     build:
-      context: /Users/marina/data
-      dockerfile: frontend/Dockerfile
+      context: /Users/marina/data/frontend
+      dockerfile: Dockerfile
     container_name: data-orchestrator-frontend
     depends_on:
       - backend
     ports:
       - "3000:3000"
     restart: unless-stopped
+    environment:
+      - NODE_ENV=production
 
 

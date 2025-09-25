@@ -48,6 +48,7 @@ async def upload_csv(
     file: UploadFile = File(...),
     source_type: str = Form("csv"),
     chunk_size: int = Form(10),
+    delimiter: str = Form(";"),
 ):
     content_bytes = await file.read()
     try:
@@ -57,7 +58,7 @@ async def upload_csv(
 
     st = (source_type or "csv").lower()
     if st == "csv":
-        source = CSVSource(text_data=text)
+        source = CSVSource(text_data=text, delimiter=delimiter)
     elif st == "json":
         source = JSONSource(text_data=text)
     elif st == "xml":
@@ -65,7 +66,7 @@ async def upload_csv(
     else:
         return JSONResponse({"error": f"Unknown source_type {source_type}"}, status_code=400)
 
-    sink = PreviewSink(max_rows=chunk_size)
+    sink = PreviewSink(max_rows=10)
 
     result = sink.write(source.headers(), source.read())
     return JSONResponse(result)
@@ -77,6 +78,7 @@ async def transfer(
     sink_type: str = Form(...),
     chunk_size: int = Form(1000),
     file: UploadFile = File(...),
+    delimiter: str = Form(";"),
 ):
     content_bytes = await file.read()
     try:
@@ -86,7 +88,7 @@ async def transfer(
 
     # Build source
     if source_type.lower() == "csv":
-        source = CSVSource(text)
+        source = CSVSource(text, delimiter=delimiter)
     elif source_type.lower() == "json":
         source = JSONSource(text)
     elif source_type.lower() == "xml":
@@ -98,13 +100,13 @@ async def transfer(
     out_ext = sink_type.lower()
     out_path = f"/tmp/output.{out_ext}"
     if sink_type.lower() == "csv":
-        sink = CSVFileSink(out_path)
+        sink = CSVFileSink(out_path, delimiter=delimiter)
     elif sink_type.lower() == "json":
         sink = JSONFileSink(out_path)
     elif sink_type.lower() == "xml":
         sink = XMLFileSink(out_path)
     elif sink_type.lower() == "preview":
-        sink = PreviewSink(max_rows=chunk_size)  # not chunk-aware, but acceptable for preview
+        sink = PreviewSink(max_rows=10)  # ограничиваем предпросмотр 10 строками
     else:
         return JSONResponse({"error": f"Unknown sink_type {sink_type}"}, status_code=400)
 
