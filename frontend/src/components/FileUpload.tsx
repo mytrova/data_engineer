@@ -72,18 +72,23 @@ const RemoveButton = styled.button`
 interface FileUploadProps {
   file: File | null
   onFileSelect: (file: File | null) => void
+  onFileNameChange?: (fileName: string) => void
   disabled?: boolean
 }
 
 export const FileUpload: React.FC<FileUploadProps> = ({ 
   file, 
   onFileSelect, 
+  onFileNameChange,
   disabled = false 
 }) => {
   const { getRootProps, getInputProps, isDragActive } = useDropzone({
     onDrop: (acceptedFiles) => {
       if (acceptedFiles.length > 0) {
         onFileSelect(acceptedFiles[0])
+        if (onFileNameChange) {
+          onFileNameChange(acceptedFiles[0].name)
+        }
       }
     },
     accept: {
@@ -99,6 +104,9 @@ export const FileUpload: React.FC<FileUploadProps> = ({
   const handleRemove = (e: React.MouseEvent) => {
     e.stopPropagation()
     onFileSelect(null)
+    if (onFileNameChange) {
+      onFileNameChange('')
+    }
   }
 
   return (

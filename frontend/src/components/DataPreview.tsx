@@ -205,7 +205,10 @@ export const DataPreview: React.FC<DataPreviewProps> = ({
 
       {sinkType === 'preview' ? renderTable() : (
         <div>
-          <p><strong>Статус:</strong> {data?.result || 'Обработка завершена'}</p>
+          <p><strong>Статус:</strong> {typeof data?.result === 'string' ? data.result : 
+            (data?.result as any)?.status === 'success' ? 
+              `Данные успешно записаны в таблицу "${(data?.result as any)?.table}". Записано строк: ${(data?.result as any)?.rows_written}` :
+              JSON.stringify(data?.result) || 'Обработка завершена'}</p>
           {data?.out_path && (
             <p><strong>Путь к файлу:</strong> {data.out_path}</p>
           )}

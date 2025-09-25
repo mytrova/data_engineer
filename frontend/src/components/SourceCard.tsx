@@ -75,9 +75,17 @@ interface SourceCardProps {
   sourceType: string
   file: File | null
   delimiter: string
+  dbCredentials: {
+    host: string
+    port: string
+    database: string
+    username: string
+    password: string
+  }
   onSourceTypeChange: (type: string) => void
   onFileSelect: (file: File | null) => void
   onDelimiterChange: (delimiter: string) => void
+  onDbCredentialsChange: (credentials: any) => void
   disabled?: boolean
 }
 

@@ -1,8 +1,7 @@
 import React from 'react'
 import styled from 'styled-components'
-import { SourceCard } from './SourceCard'
-import { SinkCard } from './SinkCard'
-import { ProcessingSettings } from './ProcessingSettings'
+import { SourceSelector } from './SourceSelector'
+import { SinkSelector } from './SinkSelector'
 import { DataPreview } from './DataPreview'
 import { ProgressBar } from './ProgressBar'
 import { useDataTransfer } from '../hooks/useDataTransfer'
@@ -33,26 +32,15 @@ const Subtitle = styled.p`
 
 const FormGrid = styled.div`
   display: grid;
-  grid-template-columns: 1fr 1fr 1fr;
+  grid-template-columns: 1fr 1fr;
   gap: 2rem;
   margin-bottom: 2rem;
-
-  @media (max-width: 1200px) {
-    grid-template-columns: 1fr 1fr;
-  }
 
   @media (max-width: 768px) {
     grid-template-columns: 1fr;
   }
 `
 
-const StatusContainer = styled.div`
-  margin-top: 1rem;
-  padding: 1rem;
-  background: #f7fafc;
-  border-radius: 10px;
-  border-left: 4px solid #4299e1;
-`
 
 const ErrorContainer = styled.div`
   margin-top: 1rem;
@@ -69,15 +57,42 @@ export const DataTransferForm: React.FC = () => {
     sourceType,
     sinkType,
     chunkSize,
-    delimiter,
+    sourceDelimiter,
+    sinkDelimiter,
+    sourceDbHost,
+    sourceDbPort,
+    sourceDbDatabase,
+    sourceDbUsername,
+    sourceDbPassword,
+    sourceDbTableName,
+    sinkDbHost,
+    sinkDbPort,
+    sinkDbDatabase,
+    sinkDbUsername,
+    sinkDbPassword,
+    sinkDbTableName,
     isLoading,
     error,
     result,
     setFile,
+    setFileName,
     setSourceType,
     setSinkType,
     setChunkSize,
-    setDelimiter,
+    setSourceDelimiter,
+    setSinkDelimiter,
+    setSourceDbHost,
+    setSourceDbPort,
+    setSourceDbDatabase,
+    setSourceDbUsername,
+    setSourceDbPassword,
+    setSourceDbTableName,
+    setSinkDbHost,
+    setSinkDbPort,
+    setSinkDbDatabase,
+    setSinkDbUsername,
+    setSinkDbPassword,
+    setSinkDbTableName,
     handleTransfer,
     reset
   } = useDataTransfer()
@@ -88,27 +103,48 @@ export const DataTransferForm: React.FC = () => {
       <Subtitle>Выберите источник, приёмник и загрузите файл для обработки</Subtitle>
       
       <FormGrid>
-        <SourceCard
-          sourceType={sourceType}
-          file={file}
-          delimiter={delimiter}
-          onSourceTypeChange={setSourceType}
-          onFileSelect={setFile}
-          onDelimiterChange={setDelimiter}
-          disabled={isLoading}
-        />
+            <SourceSelector
+              sourceType={sourceType}
+              delimiter={sourceDelimiter}
+              file={file}
+              dbHost={sourceDbHost}
+              dbPort={sourceDbPort}
+              dbDatabase={sourceDbDatabase}
+              dbUsername={sourceDbUsername}
+              dbPassword={sourceDbPassword}
+              dbTableName={sourceDbTableName}
+              onSourceTypeChange={setSourceType}
+              onDelimiterChange={setSourceDelimiter}
+              onFileSelect={setFile}
+              onFileNameChange={setFileName}
+              onDbHostChange={setSourceDbHost}
+              onDbPortChange={setSourceDbPort}
+              onDbDatabaseChange={setSourceDbDatabase}
+              onDbUsernameChange={setSourceDbUsername}
+              onDbPasswordChange={setSourceDbPassword}
+              onDbTableNameChange={setSourceDbTableName}
+              disabled={isLoading}
+            />
         
-        <SinkCard
+        <SinkSelector
           sinkType={sinkType}
-          delimiter={delimiter}
-          onSinkTypeChange={setSinkType}
-          onDelimiterChange={setDelimiter}
-          disabled={isLoading}
-        />
-
-        <ProcessingSettings
+          delimiter={sinkDelimiter}
           chunkSize={chunkSize}
+          dbHost={sinkDbHost}
+          dbPort={sinkDbPort}
+          dbDatabase={sinkDbDatabase}
+          dbUsername={sinkDbUsername}
+          dbPassword={sinkDbPassword}
+          dbTableName={sinkDbTableName}
+          onSinkTypeChange={setSinkType}
+          onDelimiterChange={setSinkDelimiter}
           onChunkSizeChange={setChunkSize}
+          onDbHostChange={setSinkDbHost}
+          onDbPortChange={setSinkDbPort}
+          onDbDatabaseChange={setSinkDbDatabase}
+          onDbUsernameChange={setSinkDbUsername}
+          onDbPasswordChange={setSinkDbPassword}
+          onDbTableNameChange={setSinkDbTableName}
           disabled={isLoading}
         />
       </FormGrid>
@@ -151,14 +187,8 @@ export const DataTransferForm: React.FC = () => {
 
       {error && (
         <ErrorContainer>
-          <strong>Ошибка:</strong> {error}
+          <strong>Ошибка:</strong> {typeof error === 'string' ? error : JSON.stringify(error)}
         </ErrorContainer>
-      )}
-
-      {result && result.result && (
-        <StatusContainer>
-          <strong>Результат:</strong> {result.result}
-        </StatusContainer>
       )}
 
       {result && (
