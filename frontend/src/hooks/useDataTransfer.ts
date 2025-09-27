@@ -5,6 +5,11 @@ interface TransferResult {
   out_path?: string
   headers?: string[]
   rows?: any[]
+  message?: string
+  dag_id?: string
+  status?: string
+  dag_run?: any
+  error?: string
 }
 
 // Функции для работы с localStorage
@@ -50,6 +55,7 @@ export const useDataTransfer = () => {
   const [sinkDbUsername, setSinkDbUsername] = useState('')
   const [sinkDbPassword, setSinkDbPassword] = useState('')
   const [sinkDbTableName, setSinkDbTableName] = useState('')
+  const [useAirflow, setUseAirflow] = useState(false)
   
   const [isLoading, setIsLoading] = useState(false)
   const [error, setError] = useState<string | null>(null)
@@ -145,7 +151,197 @@ export const useDataTransfer = () => {
       let formData: FormData
 
       if (sinkType === 'database') {
-        // Используем специальный эндпоинт для переноса в БД
+        if (useAirflow) {
+          let uploadedFileName = ''
+          
+          // Если источник - файл, сначала загружаем его
+          if (sourceType !== 'database' && file) {
+            const uploadFormData = new FormData()
+            uploadFormData.append('file', file)
+            
+            const uploadResponse = await fetch('/api/airflow/upload-file', {
+              method: 'POST',
+              body: uploadFormData
+            })
+            
+            const uploadData = await uploadResponse.json()
+            if (uploadData.status === 'success') {
+              uploadedFileName = uploadData.file_name
+            } else {
+              setResult({
+                status: 'error',
+                error: `Ошибка загрузки файла: ${uploadData.error}`
+              })
+              return
+            }
+          }
+          
+          // Создаем DAG для Airflow
+          const sourceConfig = {
+            type: sourceType === 'database' ? 'database' : 'file',
+            ...(sourceType === 'database' ? {
+              host: sourceDbHost,
+              port: sourceDbPort,
+              database: sourceDbDatabase,
+              username: sourceDbUsername,
+              password: sourceDbPassword,
+              table_name: sourceDbTableName
+            } : {
+              file_path: uploadedFileName ? `/opt/airflow/${uploadedFileName}` : '',
+              file_type: sourceType,
+              delimiter: sourceDelimiter
+            })
+          }
+          
+          const sinkConfig = {
+            type: 'postgresql',
+            host: sinkDbHost,
+            port: sinkDbPort,
+            database: sinkDbDatabase,
+            username: sinkDbUsername,
+            password: sinkDbPassword,
+            table_name: sinkDbTableName
+          }
+          
+          // Создаем DAG
+          const dagResponse = await fetch(`${getApiBase()}/airflow/generate-dag`, {
+            method: 'POST',
+            headers: {
+              'Content-Type': 'application/json',
+            },
+            body: JSON.stringify({
+              source_config: sourceConfig,
+              sink_config: sinkConfig,
+              chunk_size: chunkSize,
+              total_rows: null // Пока не знаем общее количество строк
+            })
+          })
+          
+          if (!dagResponse.ok) {
+            const errorData = await dagResponse.json().catch(() => ({}))
+            throw new Error(errorData.error || 'Ошибка при создании DAG')
+          }
+          
+          const dagData = await dagResponse.json()
+          
+          // Пытаемся запустить DAG сразу после создания
+          const dagInfo = {
+            message: `DAG ${dagData.dag_id} создан. Попытка запуска...`,
+            dag_id: dagData.dag_id,
+            status: 'creating',
+            result: 'Создание DAG в фоновом режиме...'
+          }
+          
+          setResult(dagInfo)
+          
+          // Сохраняем в localStorage для отслеживания в Airflow Dashboard
+          const existingDAGs = JSON.parse(localStorage.getItem('creating_dags') || '{}')
+          existingDAGs[dagData.dag_id] = dagInfo
+          localStorage.setItem('creating_dags', JSON.stringify(existingDAGs))
+          
+                 // Функция для попытки запуска DAG с повторными попытками
+                 const attemptTriggerDAG = async (attemptNumber = 1, maxAttempts = 50) => {
+            try {
+              // Сначала принудительно обновляем DAG'и в Airflow (каждые 3 попытки)
+              if (attemptNumber % 3 === 1) {
+                try {
+                  await fetch(`${getApiBase()}/airflow/dags/reserialize`, { method: 'POST' })
+                  console.log(`Попытка ${attemptNumber}: DAG'и обновлены в Airflow`)
+                } catch (reserializeError) {
+                  console.log(`Попытка ${attemptNumber}: Не удалось обновить DAG'и:`, reserializeError)
+                }
+              }
+              
+              // Проверяем, загрузился ли DAG в Airflow
+              const dagStatusResponse = await fetch(`${getApiBase()}/airflow/dags/${dagData.dag_id}`)
+              
+              if (dagStatusResponse.ok) {
+                // DAG загружен, пытаемся запустить
+                const triggerResponse = await fetch(`${getApiBase()}/airflow/dags/${dagData.dag_id}/trigger`, {
+                  method: 'POST'
+                })
+                
+                if (triggerResponse.ok) {
+                  const triggerData = await triggerResponse.json()
+                  const updatedDagInfo = {
+                    message: `DAG ${dagData.dag_id} запущен и выполняется в фоне`,
+                    dag_id: dagData.dag_id,
+                    status: 'running',
+                    dag_run: triggerData.dag_run,
+                    result: 'Переливка данных выполняется в фоновом режиме через Airflow'
+                  }
+                  setResult(updatedDagInfo)
+                  
+                  // Обновляем localStorage
+                  const existingDAGs = JSON.parse(localStorage.getItem('creating_dags') || '{}')
+                  existingDAGs[dagData.dag_id] = updatedDagInfo
+                  localStorage.setItem('creating_dags', JSON.stringify(existingDAGs))
+                  return // Успешно запущен
+                }
+              }
+              
+                     // Если не удалось запустить и есть еще попытки
+                     if (attemptNumber < maxAttempts) {
+                       const delay = Math.min(attemptNumber * 3, 60) * 1000 // Увеличиваем задержку: 3s, 6s, 9s, 12s, 15s... до 60s
+                
+                const updatedDagInfo = {
+                  message: `DAG ${dagData.dag_id} создан. Попытка запуска ${attemptNumber}/${maxAttempts}...`,
+                  dag_id: dagData.dag_id,
+                  status: 'creating',
+                  result: `Попытка запуска ${attemptNumber}/${maxAttempts}...`
+                }
+                setResult(updatedDagInfo)
+                
+                // Обновляем localStorage
+                const existingDAGs = JSON.parse(localStorage.getItem('creating_dags') || '{}')
+                existingDAGs[dagData.dag_id] = updatedDagInfo
+                localStorage.setItem('creating_dags', JSON.stringify(existingDAGs))
+                
+                // Повторяем попытку через delay
+                setTimeout(() => attemptTriggerDAG(attemptNumber + 1, maxAttempts), delay)
+              } else {
+                // Все попытки исчерпаны
+                const updatedDagInfo = {
+                  message: `DAG ${dagData.dag_id} создан, но не удалось запустить автоматически. Запустите вручную в Airflow UI.`,
+                  dag_id: dagData.dag_id,
+                  status: 'created',
+                  result: 'DAG создан, но требует ручного запуска в Airflow UI'
+                }
+                setResult(updatedDagInfo)
+                
+                // Обновляем localStorage
+                const existingDAGs = JSON.parse(localStorage.getItem('creating_dags') || '{}')
+                existingDAGs[dagData.dag_id] = updatedDagInfo
+                localStorage.setItem('creating_dags', JSON.stringify(existingDAGs))
+              }
+            } catch (error) {
+                     // Ошибка при попытке запуска
+                     if (attemptNumber < maxAttempts) {
+                       const delay = Math.min(attemptNumber * 3, 60) * 1000
+                setTimeout(() => attemptTriggerDAG(attemptNumber + 1, maxAttempts), delay)
+              } else {
+                const errorDagInfo = {
+                  message: `DAG ${dagData.dag_id} создан, но произошла ошибка при запуске: ${error}`,
+                  dag_id: dagData.dag_id,
+                  status: 'error',
+                  result: `Ошибка при запуске DAG: ${error}`
+                }
+                setResult(errorDagInfo)
+                
+                // Обновляем localStorage
+                const existingDAGs = JSON.parse(localStorage.getItem('creating_dags') || '{}')
+                existingDAGs[dagData.dag_id] = errorDagInfo
+                localStorage.setItem('creating_dags', JSON.stringify(existingDAGs))
+              }
+            }
+          }
+          
+                 // Запускаем первую попытку через 15 секунд
+                 setTimeout(() => attemptTriggerDAG(1, 50), 15000)
+          
+          return // Выходим из функции, так как процесс асинхронный
+        } else {
+          // Обычная переливка в БД
         endpoint = '/transfer/to-database'
         formData = new FormData()
         
@@ -170,6 +366,7 @@ export const useDataTransfer = () => {
           }
           formData.append('source_connection_string', `postgresql://${sourceDbUsername}:${sourceDbPassword}@${sourceDbHost}:${sourceDbPort}/${sourceDbDatabase}`)
           formData.append('source_table_name', sourceDbTableName)
+          }
         }
       } else {
         // Обычный перенос в файлы
@@ -290,6 +487,7 @@ export const useDataTransfer = () => {
     sinkDbUsername,
     sinkDbPassword,
     sinkDbTableName,
+    useAirflow,
     isLoading,
     error,
     result,
@@ -312,6 +510,7 @@ export const useDataTransfer = () => {
     setSinkDbUsername,
     setSinkDbPassword,
     setSinkDbTableName,
+    setUseAirflow,
     handleTransfer,
     reset
   }

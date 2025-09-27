@@ -100,6 +100,30 @@ const ProcessingSettingsHeader = styled.div`
   font-size: 0.9rem;
 `
 
+const CheckboxContainer = styled.div`
+  display: flex;
+  align-items: center;
+  gap: 0.5rem;
+  margin-top: 1rem;
+  padding: 0.75rem;
+  background: #f0f9ff;
+  border: 1px solid #bae6fd;
+  border-radius: 8px;
+`
+
+const Checkbox = styled.input`
+  width: 16px;
+  height: 16px;
+  cursor: pointer;
+`
+
+const CheckboxLabel = styled.label`
+  color: #0369a1;
+  font-weight: 500;
+  cursor: pointer;
+  font-size: 0.9rem;
+`
+
 interface SinkSelectorProps {
   sinkType: string
   delimiter: string
@@ -110,6 +134,7 @@ interface SinkSelectorProps {
   dbUsername: string
   dbPassword: string
   dbTableName: string
+  useAirflow: boolean
   onSinkTypeChange: (type: string) => void
   onDelimiterChange: (delimiter: string) => void
   onChunkSizeChange: (size: number) => void
@@ -119,6 +144,7 @@ interface SinkSelectorProps {
   onDbUsernameChange: (username: string) => void
   onDbPasswordChange: (password: string) => void
   onDbTableNameChange: (tableName: string) => void
+  onUseAirflowChange: (use: boolean) => void
   disabled?: boolean
 }
 
@@ -132,6 +158,7 @@ export const SinkSelector: React.FC<SinkSelectorProps> = ({
   dbUsername,
   dbPassword,
   dbTableName,
+  useAirflow,
   onSinkTypeChange,
   onDelimiterChange,
   onChunkSizeChange,
@@ -141,6 +168,7 @@ export const SinkSelector: React.FC<SinkSelectorProps> = ({
   onDbUsernameChange,
   onDbPasswordChange,
   onDbTableNameChange,
+  onUseAirflowChange,
   disabled = false
 }) => {
   const needsDelimiter = sinkType.toLowerCase() === 'csv'
@@ -210,21 +238,36 @@ export const SinkSelector: React.FC<SinkSelectorProps> = ({
       )}
 
       {sinkType === 'database' && (
-        <DatabaseConnectionForm
-          host={dbHost}
-          port={dbPort}
-          database={dbDatabase}
-          username={dbUsername}
-          password={dbPassword}
-          tableName={dbTableName}
-          onHostChange={onDbHostChange}
-          onPortChange={onDbPortChange}
-          onDatabaseChange={onDbDatabaseChange}
-          onUsernameChange={onDbUsernameChange}
-          onPasswordChange={onDbPasswordChange}
-          onTableNameChange={onDbTableNameChange}
-          disabled={disabled}
-        />
+        <>
+          <DatabaseConnectionForm
+            host={dbHost}
+            port={dbPort}
+            database={dbDatabase}
+            username={dbUsername}
+            password={dbPassword}
+            tableName={dbTableName}
+            onHostChange={onDbHostChange}
+            onPortChange={onDbPortChange}
+            onDatabaseChange={onDbDatabaseChange}
+            onUsernameChange={onDbUsernameChange}
+            onPasswordChange={onDbPasswordChange}
+            onTableNameChange={onDbTableNameChange}
+            disabled={disabled}
+          />
+          
+          <CheckboxContainer>
+            <Checkbox
+              type="checkbox"
+              id="use-airflow"
+              checked={useAirflow}
+              onChange={(e) => onUseAirflowChange(e.target.checked)}
+              disabled={disabled}
+            />
+            <CheckboxLabel htmlFor="use-airflow">
+              Использовать Airflow для оркестрации переливки данных
+            </CheckboxLabel>
+          </CheckboxContainer>
+        </>
       )}
     </SinkContainer>
   )

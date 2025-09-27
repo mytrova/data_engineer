@@ -71,6 +71,7 @@ export const DataTransferForm: React.FC = () => {
     sinkDbUsername,
     sinkDbPassword,
     sinkDbTableName,
+    useAirflow,
     isLoading,
     error,
     result,
@@ -93,6 +94,7 @@ export const DataTransferForm: React.FC = () => {
     setSinkDbUsername,
     setSinkDbPassword,
     setSinkDbTableName,
+    setUseAirflow,
     handleTransfer,
     reset
   } = useDataTransfer()
@@ -136,6 +138,7 @@ export const DataTransferForm: React.FC = () => {
           dbUsername={sinkDbUsername}
           dbPassword={sinkDbPassword}
           dbTableName={sinkDbTableName}
+          useAirflow={useAirflow}
           onSinkTypeChange={setSinkType}
           onDelimiterChange={setSinkDelimiter}
           onChunkSizeChange={setChunkSize}
@@ -145,6 +148,7 @@ export const DataTransferForm: React.FC = () => {
           onDbUsernameChange={setSinkDbUsername}
           onDbPasswordChange={setSinkDbPassword}
           onDbTableNameChange={setSinkDbTableName}
+          onUseAirflowChange={setUseAirflow}
           disabled={isLoading}
         />
       </FormGrid>
