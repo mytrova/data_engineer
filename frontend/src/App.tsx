@@ -1,6 +1,8 @@
 import styled from 'styled-components'
 import { DataTransferForm } from './components/DataTransferForm'
 import { Header } from './components/Header'
+import { AirflowDashboard } from './components/AirflowDashboard'
+import LargeFileManager from './components/LargeFileManager'
 import { GlobalStyles } from './styles/GlobalStyles'
 
 const AppContainer = styled.div`
@@ -30,6 +32,8 @@ function App() {
         <Header />
         <MainContent>
           <ContentWrapper>
+            <AirflowDashboard />
+            <LargeFileManager />
             <DataTransferForm />
           </ContentWrapper>
         </MainContent>

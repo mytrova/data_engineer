@@ -8,7 +8,18 @@ services:
       - "8000:8000"
     environment:
       - UVICORN_WORKERS=1
+    depends_on:
+      - postgres
+    volumes:
+      - ./airflow/dags:/app/airflow/dags
+      - /var/run/docker.sock:/var/run/docker.sock
     restart: unless-stopped
+    deploy:
+      resources:
+        limits:
+          memory: 4G
+        reservations:
+          memory: 2G
 
   frontend:
     build:
@@ -22,5 +33,47 @@ services:
     restart: unless-stopped
     environment:
       - NODE_ENV=production
+
+  postgres:
+    image: postgres:15
+    container_name: data-orchestrator-postgres
+    environment:
+      POSTGRES_USER: airflow
+      POSTGRES_PASSWORD: airflow
+      POSTGRES_DB: airflow
+    volumes:
+      - postgres_data:/var/lib/postgresql/data
+    ports:
+      - "5432:5432"
+    restart: unless-stopped
+
+  airflow:
+    build:
+      context: /Users/marina/data
+      dockerfile: airflow/Dockerfile
+    container_name: data-orchestrator-airflow
+    depends_on:
+      - postgres
+    ports:
+      - "8081:8080"
+    environment:
+      - AIRFLOW__CORE__EXECUTOR=LocalExecutor
+      - AIRFLOW__DATABASE__SQL_ALCHEMY_CONN=postgresql+psycopg2://airflow:airflow@postgres:5432/airflow
+      - AIRFLOW__CORE__FERNET_KEY=your-fernet-key-here
+      - AIRFLOW__CORE__DAGS_ARE_PAUSED_AT_CREATION=False
+      - AIRFLOW__CORE__LOAD_DEFAULT_CONNECTIONS=False
+      - AIRFLOW__CORE__LOAD_EXAMPLES=False
+      - AIRFLOW__WEBSERVER__EXPOSE_CONFIG=True
+      - AIRFLOW__WEBSERVER__SECRET_KEY=your-secret-key-here
+      - AIRFLOW__API__AUTH_BACKENDS=
+      - AIRFLOW__API__AUTHENTICATION_BACKENDS=
+    volumes:
+      - airflow_logs:/opt/airflow/logs
+      - ./airflow/dags:/opt/airflow/dags
+    restart: unless-stopped
+
+volumes:
+  postgres_data:
+  airflow_logs:
 
 

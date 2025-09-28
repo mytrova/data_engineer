@@ -21,14 +21,19 @@
 - REST API на FastAPI.
 - Docker и docker-compose для запуска.
 - Тесты на pytest.
+- 🚀 **Apache Airflow** для оркестрации рабочих процессов.
 
 ## Структура
 - Backend (FastAPI): `backend/app`
   - Абстракции: `app/services/base.py` (`DataSource`, `DataSink`), поддержка чанков
   - Источники: `CSVSource`, `JSONSource`, `XMLSource`
   - Приёмники: `CSVFileSink`, `JSONFileSink`, `XMLFileSink`, `PreviewSink`
-  - API: `POST /upload` (предпросмотр), `POST /transfer` (перенос с выбором типов)
+  - Airflow интеграция: `app/services/airflow_client.py`
+  - API: `POST /upload` (предпросмотр), `POST /transfer` (перенос с выбором типов), `/airflow/*` (управление DAG)
 - Frontend: React приложение с TypeScript и современным UI
+  - Airflow Dashboard: `src/components/AirflowDashboard.tsx`
+  - Airflow hooks: `src/hooks/useAirflow.ts`
+- Airflow: `airflow/Dockerfile`, `airflow/dags/` (DAG файлы)
 - Docker: `backend/Dockerfile`, `frontend/Dockerfile`, `docker-compose.yml`
 - Тесты: `backend/tests`
 
@@ -40,6 +45,7 @@ docker compose up -d --build
 
 - Фронтенд: http://localhost:3000
 - Бэкенд: http://localhost:8000/health
+- **Airflow**: http://localhost:8081
 
 ## Использование
 ### Веб-интерфейс
@@ -64,6 +70,17 @@ docker compose up -d --build
     - 🧪 **Тестирование подключения** - проверка соединения с БД перед переносом
     - 🧠 **Умные типы данных** - автоматическое определение INTEGER, VARCHAR, DATE, BOOLEAN и других типов
 
+### Airflow Dashboard
+1. **Просмотр DAG**: список всех доступных рабочих процессов
+2. **Управление DAG**: запуск, приостановка, возобновление
+3. **Мониторинг**: просмотр статуса выполнения и истории запусков
+4. **Переход в веб-интерфейс**: прямая ссылка на Airflow UI
+
+**Учетные данные Airflow**:
+- **URL**: http://localhost:8081
+- **Логин**: `admin`
+- **Пароль**: `uSv9mh8FRTuEYz7z`
+
 ### API
 - **Предпросмотр файлов**:
   - `POST /upload` form-data: `file` (файл), `delimiter` (str, по умолчанию ";"). Ответ: `{ headers, rows }`
@@ -77,6 +94,15 @@ docker compose up -d --build
   - `POST /database/query` - выполнение SQL запроса
   - `POST /transfer/to-database` - перенос данных в PostgreSQL
     - Параметры: `source_type`, `file`, `sink_connection_string`, `sink_table_name`, `sink_mode`, `chunk_size`, `delimiter`, `database_type`
+- **Управление Airflow**:
+  - `GET /airflow/dags` - список всех DAG
+  - `GET /airflow/dags/{dag_id}/status` - статус конкретного DAG
+  - `GET /airflow/dags/{dag_id}/runs` - список запусков DAG
+  - `POST /airflow/dags/{dag_id}/trigger` - запуск DAG
+  - `POST /airflow/dags/{dag_id}/pause` - приостановка DAG
+  - `POST /airflow/dags/{dag_id}/unpause` - возобновление DAG
+  - `GET /airflow/dags/{dag_id}/ui-url` - URL для перехода к DAG в веб-интерфейсе
+  - `GET /airflow/ui-url` - URL веб-интерфейса Airflow
 
 ## Тесты
 Запуск тестов локально:
@@ -86,9 +112,20 @@ docker compose exec backend pip install -r /app/requirements.txt
 docker compose exec backend pytest -q
 ```
 
+## Документация
+
+### Airflow
+- **Полная документация**: `AIRFLOW_DOCUMENTATION.md`
+- **Быстрая справка**: `AIRFLOW_QUICK_REFERENCE.md`
+
+### Основные учетные данные
+- **Airflow веб-интерфейс**: http://localhost:8081 (admin / uSv9mh8FRTuEYz7z)
+- **API пользователь**: api_user / api123
+
 ## Примечания
 - Источники JSON: поддерживаются массивы объектов или `{"items": [...]}`; для массивов массивов заголовки будут `col1..colN`.
 - Источники XML: по умолчанию ищется тег `item` (или берутся прямые дети корня), заголовки формируются из имён дочерних тегов.
 - При сохранении файлов приёмники пишут в `/tmp` внутри контейнера бэкенда.
+- Airflow DAG по умолчанию приостанавливаются при создании - используйте веб-интерфейс для их активации.
 
 

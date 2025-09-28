@@ -51,6 +51,7 @@ const ErrorContainer = styled.div`
   color: #c53030;
 `
 
+
 export const DataTransferForm: React.FC = () => {
   const {
     file,
@@ -71,6 +72,7 @@ export const DataTransferForm: React.FC = () => {
     sinkDbUsername,
     sinkDbPassword,
     sinkDbTableName,
+    useAirflow,
     isLoading,
     error,
     result,
@@ -93,9 +95,11 @@ export const DataTransferForm: React.FC = () => {
     setSinkDbUsername,
     setSinkDbPassword,
     setSinkDbTableName,
+    setUseAirflow,
     handleTransfer,
     reset
   } = useDataTransfer()
+
 
   return (
     <FormContainer>
@@ -136,6 +140,8 @@ export const DataTransferForm: React.FC = () => {
           dbUsername={sinkDbUsername}
           dbPassword={sinkDbPassword}
           dbTableName={sinkDbTableName}
+          useAirflow={useAirflow}
+          sourceType={sourceType}
           onSinkTypeChange={setSinkType}
           onDelimiterChange={setSinkDelimiter}
           onChunkSizeChange={setChunkSize}
@@ -145,6 +151,7 @@ export const DataTransferForm: React.FC = () => {
           onDbUsernameChange={setSinkDbUsername}
           onDbPasswordChange={setSinkDbPassword}
           onDbTableNameChange={setSinkDbTableName}
+          onUseAirflowChange={setUseAirflow}
           disabled={isLoading}
         />
       </FormGrid>
