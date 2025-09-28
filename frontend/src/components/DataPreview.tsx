@@ -1,6 +1,6 @@
 import React from 'react'
 import styled from 'styled-components'
-import { Table as TableIcon, Download, RotateCcw } from 'lucide-react'
+import { Table as TableIcon, Download, RotateCcw, FileText } from 'lucide-react'
 
 const PreviewContainer = styled.div`
   background: #f7fafc;
@@ -69,6 +69,34 @@ const Table = styled.table`
   width: 100%;
   border-collapse: collapse;
 `
+
+const LargeFileContainer = styled.div`
+  background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+  border-radius: 12px;
+  padding: 2rem;
+  color: white;
+  text-align: center;
+`
+
+const LargeFileIcon = styled.div`
+  font-size: 3rem;
+  margin-bottom: 1rem;
+  display: flex;
+  justify-content: center;
+`
+
+const LargeFileTitle = styled.h3`
+  color: white;
+  margin: 0 0 1rem 0;
+  font-size: 1.5rem;
+`
+
+const LargeFileMessage = styled.p`
+  color: rgba(255, 255, 255, 0.9);
+  margin: 0 0 1.5rem 0;
+  line-height: 1.6;
+`
+
 
 const TableHeader = styled.thead`
   background: #edf2f7;
@@ -178,6 +206,23 @@ export const DataPreview: React.FC<DataPreviewProps> = ({
           </Table>
         </TableContainer>
       </>
+    )
+  }
+
+  // Проверяем, является ли результат большим файлом
+  if (data?.status === 'large_file' || sinkType === 'large_file') {
+    return (
+      <PreviewContainer>
+        <LargeFileContainer>
+          <LargeFileIcon>
+            <FileText size={48} />
+          </LargeFileIcon>
+          <LargeFileTitle>Большой файл обрабатывается</LargeFileTitle>
+          <LargeFileMessage>
+            Файл отправлен на фоновую обработку. Отслеживайте прогресс в разделе "Управление большими файлами".
+          </LargeFileMessage>
+        </LargeFileContainer>
+      </PreviewContainer>
     )
   }
 

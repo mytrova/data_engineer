@@ -14,6 +14,12 @@ services:
       - ./airflow/dags:/app/airflow/dags
       - /var/run/docker.sock:/var/run/docker.sock
     restart: unless-stopped
+    deploy:
+      resources:
+        limits:
+          memory: 4G
+        reservations:
+          memory: 2G
 
   frontend:
     build:

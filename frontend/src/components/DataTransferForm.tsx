@@ -51,6 +51,7 @@ const ErrorContainer = styled.div`
   color: #c53030;
 `
 
+
 export const DataTransferForm: React.FC = () => {
   const {
     file,
@@ -99,6 +100,7 @@ export const DataTransferForm: React.FC = () => {
     reset
   } = useDataTransfer()
 
+
   return (
     <FormContainer>
       <Title>Перенос данных</Title>
@@ -139,6 +141,7 @@ export const DataTransferForm: React.FC = () => {
           dbPassword={sinkDbPassword}
           dbTableName={sinkDbTableName}
           useAirflow={useAirflow}
+          sourceType={sourceType}
           onSinkTypeChange={setSinkType}
           onDelimiterChange={setSinkDelimiter}
           onChunkSizeChange={setChunkSize}

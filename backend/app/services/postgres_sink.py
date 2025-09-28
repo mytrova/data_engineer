@@ -203,5 +203,5 @@ class PostgreSQLSink(DataSink):
     
     def __del__(self):
         """Закрытие подключения при удалении объекта"""
-        if self._connected and self.connection:
+        if hasattr(self, '_connected') and hasattr(self, 'connection') and self._connected and self.connection:
             self.connection.disconnect()

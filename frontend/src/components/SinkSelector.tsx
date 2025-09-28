@@ -135,6 +135,7 @@ interface SinkSelectorProps {
   dbPassword: string
   dbTableName: string
   useAirflow: boolean
+  sourceType?: string  // Добавляем тип источника
   onSinkTypeChange: (type: string) => void
   onDelimiterChange: (delimiter: string) => void
   onChunkSizeChange: (size: number) => void
@@ -159,6 +160,7 @@ export const SinkSelector: React.FC<SinkSelectorProps> = ({
   dbPassword,
   dbTableName,
   useAirflow,
+  sourceType,
   onSinkTypeChange,
   onDelimiterChange,
   onChunkSizeChange,
@@ -173,6 +175,9 @@ export const SinkSelector: React.FC<SinkSelectorProps> = ({
 }) => {
   const needsDelimiter = sinkType.toLowerCase() === 'csv'
   const isPreview = sinkType.toLowerCase() === 'preview'
+  
+  // Показываем галочку Airflow только если источник - база данных
+  const showAirflowOption = sourceType === 'database' && sinkType === 'database'
 
   return (
     <SinkContainer>
@@ -255,18 +260,20 @@ export const SinkSelector: React.FC<SinkSelectorProps> = ({
             disabled={disabled}
           />
           
-          <CheckboxContainer>
-            <Checkbox
-              type="checkbox"
-              id="use-airflow"
-              checked={useAirflow}
-              onChange={(e) => onUseAirflowChange(e.target.checked)}
-              disabled={disabled}
-            />
-            <CheckboxLabel htmlFor="use-airflow">
-              Использовать Airflow для оркестрации переливки данных
-            </CheckboxLabel>
-          </CheckboxContainer>
+          {showAirflowOption && (
+            <CheckboxContainer>
+              <Checkbox
+                type="checkbox"
+                id="use-airflow"
+                checked={useAirflow}
+                onChange={(e) => onUseAirflowChange(e.target.checked)}
+                disabled={disabled}
+              />
+              <CheckboxLabel htmlFor="use-airflow">
+                Использовать Airflow для оркестрации переливки данных
+              </CheckboxLabel>
+            </CheckboxContainer>
+          )}
         </>
       )}
     </SinkContainer>

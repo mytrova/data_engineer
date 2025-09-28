@@ -10,6 +10,8 @@ interface TransferResult {
   status?: string
   dag_run?: any
   error?: string
+  file_id?: number
+  file_path?: string
 }
 
 // Функции для работы с localStorage
@@ -134,6 +136,79 @@ export const useDataTransfer = () => {
       return
     }
 
+    // Проверяем, является ли файл большим (более 20 МБ)
+    if (needsFile && file && file.size > 20 * 1024 * 1024) {
+      // Большой файл - используем специальный эндпоинт для прямой переливки
+      setIsLoading(true)
+      setError(null)
+      setResult(null)
+
+      try {
+        // Проверяем, что приёмник - база данных (обязательно для больших файлов)
+        if (sinkType !== 'database') {
+          setError('Для больших файлов приёмник должен быть базой данных')
+          setIsLoading(false)
+          return
+        }
+
+        // Проверяем параметры подключения к БД
+        if (!sinkDbHost || !sinkDbPort || !sinkDbDatabase || !sinkDbUsername || !sinkDbPassword || !sinkDbTableName) {
+          setError('Пожалуйста, заполните все поля подключения к базе данных для приёмника')
+          setIsLoading(false)
+          return
+        }
+
+        const formData = new FormData()
+        formData.append('file', file)
+        
+        // Конфигурация приёмника для прямой переливки
+        const sinkConfig = {
+          type: 'database',
+          host: sinkDbHost,
+          port: parseInt(sinkDbPort || '5432'),
+          database: sinkDbDatabase,
+          username: sinkDbUsername,
+          password: sinkDbPassword,
+          table_name: sinkDbTableName,
+          db_type: 'postgresql'
+        }
+        
+        formData.append('sink_config', JSON.stringify(sinkConfig))
+        formData.append('chunk_size', chunkSize.toString())
+
+        const response = await fetch(`${getApiBase()}/large-file/upload`, {
+          method: 'POST',
+          body: formData
+        })
+
+        if (!response.ok) {
+          const errorData = await response.json().catch(() => ({}))
+          throw new Error(errorData.error || `Ошибка сервера: ${response.status}`)
+        }
+
+        const data = await response.json()
+        
+        if (data.status === 'processing') {
+          setResult({
+            status: 'processing',
+            message: data.message,
+            file_path: data.file_path,
+            result: 'Файл обрабатывается с прямой переливкой в базу данных. Проверьте статус в разделе "Управление большими файлами".'
+          })
+          
+          // Очищаем источник данных после отправки на обработку
+          setFile(null)
+        } else {
+          setResult(data)
+        }
+      } catch (err) {
+        setError(err instanceof Error ? err.message : 'Произошла неизвестная ошибка')
+      } finally {
+        setIsLoading(false)
+      }
+      return
+    }
+
     // Проверяем, нужны ли параметры БД для приёмника
     if (sinkType === 'database') {
       if (!sinkDbHost || !sinkDbPort || !sinkDbDatabase || !sinkDbUsername || !sinkDbPassword || !sinkDbTableName) {
@@ -167,6 +242,16 @@ export const useDataTransfer = () => {
             const uploadData = await uploadResponse.json()
             if (uploadData.status === 'success') {
               uploadedFileName = uploadData.file_name
+            } else if (uploadData.status === 'large_file') {
+              // Большой файл - не создаем DAG, показываем сообщение
+              setResult({
+                status: 'large_file',
+                message: uploadData.message,
+                file_id: uploadData.file_id,
+                file_path: uploadData.file_path,
+                result: 'Файл сохранен и обрабатывается в фоновом режиме'
+              })
+              return
             } else {
               setResult({
                 status: 'error',
@@ -398,7 +483,19 @@ export const useDataTransfer = () => {
 
       if (sinkType === 'preview' || sinkType === 'database') {
         const data = await response.json()
-        setResult(data)
+        
+        // Проверяем, является ли файл большим
+        if (data.status === 'large_file') {
+          setResult({
+            status: 'large_file',
+            message: data.message,
+            file_id: data.file_id,
+            file_path: data.file_path,
+            result: 'Файл сохранен и обрабатывается в фоновом режиме'
+          })
+        } else {
+          setResult(data)
+        }
       } else {
         // Для файловых приёмников
         const blob = await response.blob()
