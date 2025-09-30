@@ -3,6 +3,8 @@ import styled from 'styled-components'
 import { Database, Settings } from 'lucide-react'
 import { FileUpload } from './FileUpload'
 import { DatabaseConnectionForm } from './DatabaseConnectionForm'
+import { ClickHouseConnectionForm } from './ClickHouseConnectionForm'
+import { KafkaConnectionForm } from './KafkaConnectionForm'
 
 const SourceContainer = styled.div`
   background: #f7fafc;
@@ -74,6 +76,17 @@ interface SourceSelectorProps {
   dbUsername: string
   dbPassword: string
   dbTableName: string
+  // ClickHouse
+  chHost: string
+  chPort: string
+  chDatabase: string
+  chUsername: string
+  chPassword: string
+  chTableName: string
+  // Kafka
+  kafkaBootstrapServers: string
+  kafkaTopic: string
+  kafkaGroupId: string
   onSourceTypeChange: (type: string) => void
   onDelimiterChange: (delimiter: string) => void
   onFileSelect: (file: File | null) => void
@@ -84,6 +97,17 @@ interface SourceSelectorProps {
   onDbUsernameChange: (username: string) => void
   onDbPasswordChange: (password: string) => void
   onDbTableNameChange: (tableName: string) => void
+  // ClickHouse
+  onChHostChange: (host: string) => void
+  onChPortChange: (port: string) => void
+  onChDatabaseChange: (database: string) => void
+  onChUsernameChange: (username: string) => void
+  onChPasswordChange: (password: string) => void
+  onChTableNameChange: (tableName: string) => void
+  // Kafka
+  onKafkaBootstrapServersChange: (servers: string) => void
+  onKafkaTopicChange: (topic: string) => void
+  onKafkaGroupIdChange: (groupId: string) => void
   disabled?: boolean
 }
 
@@ -97,6 +121,15 @@ export const SourceSelector: React.FC<SourceSelectorProps> = ({
   dbUsername,
   dbPassword,
   dbTableName,
+  chHost,
+  chPort,
+  chDatabase,
+  chUsername,
+  chPassword,
+  chTableName,
+  kafkaBootstrapServers,
+  kafkaTopic,
+  kafkaGroupId,
   onSourceTypeChange,
   onDelimiterChange,
   onFileSelect,
@@ -107,6 +140,15 @@ export const SourceSelector: React.FC<SourceSelectorProps> = ({
   onDbUsernameChange,
   onDbPasswordChange,
   onDbTableNameChange,
+  onChHostChange,
+  onChPortChange,
+  onChDatabaseChange,
+  onChUsernameChange,
+  onChPasswordChange,
+  onChTableNameChange,
+  onKafkaBootstrapServersChange,
+  onKafkaTopicChange,
+  onKafkaGroupIdChange,
   disabled = false
 }) => {
   const needsFile = ['csv', 'json', 'xml'].includes(sourceType.toLowerCase())
@@ -129,7 +171,9 @@ export const SourceSelector: React.FC<SourceSelectorProps> = ({
         <option value="csv">CSV файл</option>
         <option value="json">JSON файл</option>
         <option value="xml">XML файл</option>
-        <option value="database">База данных</option>
+        <option value="postgresql">PostgreSQL</option>
+        <option value="clickhouse">ClickHouse</option>
+        <option value="kafka">Kafka</option>
       </Select>
 
           {needsFile && (
@@ -164,7 +208,7 @@ export const SourceSelector: React.FC<SourceSelectorProps> = ({
         </CSVSettings>
       )}
 
-      {sourceType === 'database' && (
+      {sourceType === 'postgresql' && (
         <DatabaseConnectionForm
           host={dbHost}
           port={dbPort}
@@ -178,6 +222,36 @@ export const SourceSelector: React.FC<SourceSelectorProps> = ({
           onUsernameChange={onDbUsernameChange}
           onPasswordChange={onDbPasswordChange}
           onTableNameChange={onDbTableNameChange}
+          disabled={disabled}
+        />
+      )}
+
+      {sourceType === 'clickhouse' && (
+        <ClickHouseConnectionForm
+          host={chHost}
+          port={chPort}
+          database={chDatabase}
+          username={chUsername}
+          password={chPassword}
+          tableName={chTableName}
+          onHostChange={onChHostChange}
+          onPortChange={onChPortChange}
+          onDatabaseChange={onChDatabaseChange}
+          onUsernameChange={onChUsernameChange}
+          onPasswordChange={onChPasswordChange}
+          onTableNameChange={onChTableNameChange}
+          disabled={disabled}
+        />
+      )}
+
+      {sourceType === 'kafka' && (
+        <KafkaConnectionForm
+          bootstrapServers={kafkaBootstrapServers}
+          topic={kafkaTopic}
+          groupId={kafkaGroupId}
+          onBootstrapServersChange={onKafkaBootstrapServersChange}
+          onTopicChange={onKafkaTopicChange}
+          onGroupIdChange={onKafkaGroupIdChange}
           disabled={disabled}
         />
       )}

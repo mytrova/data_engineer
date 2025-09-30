@@ -42,7 +42,7 @@ export const useDataTransfer = () => {
   const [sourceDelimiter, setSourceDelimiter] = useState(';')
   const [sinkDelimiter, setSinkDelimiter] = useState(';')
   
-  // Поля для источника БД
+  // Поля для источника PostgreSQL
   const [sourceDbHost, setSourceDbHost] = useState('')
   const [sourceDbPort, setSourceDbPort] = useState('5432')
   const [sourceDbDatabase, setSourceDbDatabase] = useState('')
@@ -50,13 +50,40 @@ export const useDataTransfer = () => {
   const [sourceDbPassword, setSourceDbPassword] = useState('')
   const [sourceDbTableName, setSourceDbTableName] = useState('')
   
-  // Поля для приёмника БД
+  // Поля для источника ClickHouse
+  const [sourceChHost, setSourceChHost] = useState('')
+  const [sourceChPort, setSourceChPort] = useState('8123')
+  const [sourceChDatabase, setSourceChDatabase] = useState('')
+  const [sourceChUsername, setSourceChUsername] = useState('')
+  const [sourceChPassword, setSourceChPassword] = useState('')
+  const [sourceChTableName, setSourceChTableName] = useState('')
+  
+  // Поля для источника Kafka
+  const [sourceKafkaBootstrapServers, setSourceKafkaBootstrapServers] = useState('')
+  const [sourceKafkaTopic, setSourceKafkaTopic] = useState('')
+  const [sourceKafkaGroupId, setSourceKafkaGroupId] = useState('')
+  
+  // Поля для приёмника PostgreSQL
   const [sinkDbHost, setSinkDbHost] = useState('')
   const [sinkDbPort, setSinkDbPort] = useState('5432')
   const [sinkDbDatabase, setSinkDbDatabase] = useState('')
   const [sinkDbUsername, setSinkDbUsername] = useState('')
   const [sinkDbPassword, setSinkDbPassword] = useState('')
   const [sinkDbTableName, setSinkDbTableName] = useState('')
+  
+  // Поля для приёмника ClickHouse
+  const [sinkChHost, setSinkChHost] = useState('')
+  const [sinkChPort, setSinkChPort] = useState('8123')
+  const [sinkChDatabase, setSinkChDatabase] = useState('')
+  const [sinkChUsername, setSinkChUsername] = useState('')
+  const [sinkChPassword, setSinkChPassword] = useState('')
+  const [sinkChTableName, setSinkChTableName] = useState('')
+  
+  // Поля для приёмника Kafka
+  const [sinkKafkaBootstrapServers, setSinkKafkaBootstrapServers] = useState('')
+  const [sinkKafkaTopic, setSinkKafkaTopic] = useState('')
+  const [sinkKafkaKeyField, setSinkKafkaKeyField] = useState('')
+  
   const [useAirflow, setUseAirflow] = useState(false)
   
   const [isLoading, setIsLoading] = useState(false)
@@ -74,7 +101,7 @@ export const useDataTransfer = () => {
     if (savedData.sinkDelimiter) setSinkDelimiter(savedData.sinkDelimiter)
     if (savedData.fileName) setFileName(savedData.fileName)
     
-    // Поля источника БД
+    // Поля источника PostgreSQL
     if (savedData.sourceDbHost) setSourceDbHost(savedData.sourceDbHost)
     if (savedData.sourceDbPort) setSourceDbPort(savedData.sourceDbPort)
     if (savedData.sourceDbDatabase) setSourceDbDatabase(savedData.sourceDbDatabase)
@@ -82,13 +109,39 @@ export const useDataTransfer = () => {
     if (savedData.sourceDbPassword) setSourceDbPassword(savedData.sourceDbPassword)
     if (savedData.sourceDbTableName) setSourceDbTableName(savedData.sourceDbTableName)
     
-    // Поля приёмника БД
+    // Поля источника ClickHouse
+    if (savedData.sourceChHost) setSourceChHost(savedData.sourceChHost)
+    if (savedData.sourceChPort) setSourceChPort(savedData.sourceChPort)
+    if (savedData.sourceChDatabase) setSourceChDatabase(savedData.sourceChDatabase)
+    if (savedData.sourceChUsername) setSourceChUsername(savedData.sourceChUsername)
+    if (savedData.sourceChPassword) setSourceChPassword(savedData.sourceChPassword)
+    if (savedData.sourceChTableName) setSourceChTableName(savedData.sourceChTableName)
+    
+    // Поля источника Kafka
+    if (savedData.sourceKafkaBootstrapServers) setSourceKafkaBootstrapServers(savedData.sourceKafkaBootstrapServers)
+    if (savedData.sourceKafkaTopic) setSourceKafkaTopic(savedData.sourceKafkaTopic)
+    if (savedData.sourceKafkaGroupId) setSourceKafkaGroupId(savedData.sourceKafkaGroupId)
+    
+    // Поля приёмника PostgreSQL
     if (savedData.sinkDbHost) setSinkDbHost(savedData.sinkDbHost)
     if (savedData.sinkDbPort) setSinkDbPort(savedData.sinkDbPort)
     if (savedData.sinkDbDatabase) setSinkDbDatabase(savedData.sinkDbDatabase)
     if (savedData.sinkDbUsername) setSinkDbUsername(savedData.sinkDbUsername)
     if (savedData.sinkDbPassword) setSinkDbPassword(savedData.sinkDbPassword)
     if (savedData.sinkDbTableName) setSinkDbTableName(savedData.sinkDbTableName)
+    
+    // Поля приёмника ClickHouse
+    if (savedData.sinkChHost) setSinkChHost(savedData.sinkChHost)
+    if (savedData.sinkChPort) setSinkChPort(savedData.sinkChPort)
+    if (savedData.sinkChDatabase) setSinkChDatabase(savedData.sinkChDatabase)
+    if (savedData.sinkChUsername) setSinkChUsername(savedData.sinkChUsername)
+    if (savedData.sinkChPassword) setSinkChPassword(savedData.sinkChPassword)
+    if (savedData.sinkChTableName) setSinkChTableName(savedData.sinkChTableName)
+    
+    // Поля приёмника Kafka
+    if (savedData.sinkKafkaBootstrapServers) setSinkKafkaBootstrapServers(savedData.sinkKafkaBootstrapServers)
+    if (savedData.sinkKafkaTopic) setSinkKafkaTopic(savedData.sinkKafkaTopic)
+    if (savedData.sinkKafkaKeyField) setSinkKafkaKeyField(savedData.sinkKafkaKeyField)
   }, [])
 
   // Сохраняем данные в localStorage при изменении
@@ -100,24 +153,52 @@ export const useDataTransfer = () => {
       sourceDelimiter,
       sinkDelimiter,
       fileName,
+      // PostgreSQL источник
       sourceDbHost,
       sourceDbPort,
       sourceDbDatabase,
       sourceDbUsername,
       sourceDbPassword,
       sourceDbTableName,
+      // ClickHouse источник
+      sourceChHost,
+      sourceChPort,
+      sourceChDatabase,
+      sourceChUsername,
+      sourceChPassword,
+      sourceChTableName,
+      // Kafka источник
+      sourceKafkaBootstrapServers,
+      sourceKafkaTopic,
+      sourceKafkaGroupId,
+      // PostgreSQL приёмник
       sinkDbHost,
       sinkDbPort,
       sinkDbDatabase,
       sinkDbUsername,
       sinkDbPassword,
-      sinkDbTableName
+      sinkDbTableName,
+      // ClickHouse приёмник
+      sinkChHost,
+      sinkChPort,
+      sinkChDatabase,
+      sinkChUsername,
+      sinkChPassword,
+      sinkChTableName,
+      // Kafka приёмник
+      sinkKafkaBootstrapServers,
+      sinkKafkaTopic,
+      sinkKafkaKeyField
     }
     saveToStorage('dataTransferSettings', settings)
   }, [
     sourceType, sinkType, chunkSize, sourceDelimiter, sinkDelimiter, fileName,
     sourceDbHost, sourceDbPort, sourceDbDatabase, sourceDbUsername, sourceDbPassword, sourceDbTableName,
-    sinkDbHost, sinkDbPort, sinkDbDatabase, sinkDbUsername, sinkDbPassword, sinkDbTableName
+    sourceChHost, sourceChPort, sourceChDatabase, sourceChUsername, sourceChPassword, sourceChTableName,
+    sourceKafkaBootstrapServers, sourceKafkaTopic, sourceKafkaGroupId,
+    sinkDbHost, sinkDbPort, sinkDbDatabase, sinkDbUsername, sinkDbPassword, sinkDbTableName,
+    sinkChHost, sinkChPort, sinkChDatabase, sinkChUsername, sinkChPassword, sinkChTableName,
+    sinkKafkaBootstrapServers, sinkKafkaTopic, sinkKafkaKeyField
   ])
 
   const getApiBase = () => {
@@ -210,9 +291,17 @@ export const useDataTransfer = () => {
     }
 
     // Проверяем, нужны ли параметры БД для приёмника
-    if (sinkType === 'database') {
-      if (!sinkDbHost || !sinkDbPort || !sinkDbDatabase || !sinkDbUsername || !sinkDbPassword || !sinkDbTableName) {
-        setError('Пожалуйста, заполните все поля подключения к базе данных для приёмника')
+    if (['postgresql', 'clickhouse', 'kafka'].includes(sinkType)) {
+      if (sinkType === 'postgresql' && (!sinkDbHost || !sinkDbPort || !sinkDbDatabase || !sinkDbUsername || !sinkDbPassword || !sinkDbTableName)) {
+        setError('Пожалуйста, заполните все поля подключения к PostgreSQL для приёмника')
+        return
+      }
+      if (sinkType === 'clickhouse' && (!sinkChHost || !sinkChPort || !sinkChDatabase || !sinkChUsername || !sinkChPassword || !sinkChTableName)) {
+        setError('Пожалуйста, заполните все поля подключения к ClickHouse для приёмника')
+        return
+      }
+      if (sinkType === 'kafka' && (!sinkKafkaBootstrapServers || !sinkKafkaTopic)) {
+        setError('Пожалуйста, заполните все поля подключения к Kafka для приёмника')
         return
       }
     }
@@ -225,12 +314,16 @@ export const useDataTransfer = () => {
       let endpoint: string
       let formData: FormData
 
-      if (sinkType === 'database') {
+      console.log('DEBUG: sinkType =', sinkType)
+      console.log('DEBUG: useAirflow =', useAirflow)
+      console.log('DEBUG: sourceType =', sourceType)
+
+      if (['postgresql', 'clickhouse', 'kafka'].includes(sinkType)) {
         if (useAirflow) {
           let uploadedFileName = ''
           
           // Если источник - файл, сначала загружаем его
-          if (sourceType !== 'database' && file) {
+          if (!['postgresql', 'clickhouse', 'kafka'].includes(sourceType) && file) {
             const uploadFormData = new FormData()
             uploadFormData.append('file', file)
             
@@ -263,14 +356,26 @@ export const useDataTransfer = () => {
           
           // Создаем DAG для Airflow
           const sourceConfig = {
-            type: sourceType === 'database' ? 'database' : 'file',
-            ...(sourceType === 'database' ? {
-              host: sourceDbHost,
-              port: sourceDbPort,
-              database: sourceDbDatabase,
-              username: sourceDbUsername,
-              password: sourceDbPassword,
-              table_name: sourceDbTableName
+            type: ['postgresql', 'clickhouse', 'kafka'].includes(sourceType) ? sourceType : 'file',
+            ...(['postgresql', 'clickhouse', 'kafka'].includes(sourceType) ? {
+              host: sourceType === 'postgresql' ? sourceDbHost : 
+                    sourceType === 'clickhouse' ? sourceChHost : 
+                    sourceKafkaBootstrapServers,
+              port: sourceType === 'postgresql' ? sourceDbPort : 
+                    sourceType === 'clickhouse' ? sourceChPort : 
+                    '9092',
+              database: sourceType === 'postgresql' ? sourceDbDatabase : 
+                       sourceType === 'clickhouse' ? sourceChDatabase : 
+                       sourceKafkaTopic,
+              username: sourceType === 'postgresql' ? sourceDbUsername : 
+                       sourceType === 'clickhouse' ? sourceChUsername : 
+                       '',
+              password: sourceType === 'postgresql' ? sourceDbPassword : 
+                       sourceType === 'clickhouse' ? sourceChPassword : 
+                       '',
+              table_name: sourceType === 'postgresql' ? sourceDbTableName : 
+                         sourceType === 'clickhouse' ? sourceChTableName : 
+                         sourceKafkaTopic
             } : {
               file_path: uploadedFileName ? `/opt/airflow/${uploadedFileName}` : '',
               file_type: sourceType,
@@ -279,13 +384,25 @@ export const useDataTransfer = () => {
           }
           
           const sinkConfig = {
-            type: 'postgresql',
-            host: sinkDbHost,
-            port: sinkDbPort,
-            database: sinkDbDatabase,
-            username: sinkDbUsername,
-            password: sinkDbPassword,
-            table_name: sinkDbTableName
+            type: sinkType,
+            host: sinkType === 'postgresql' ? sinkDbHost : 
+                  sinkType === 'clickhouse' ? sinkChHost : 
+                  sinkKafkaBootstrapServers,
+            port: sinkType === 'postgresql' ? sinkDbPort : 
+                  sinkType === 'clickhouse' ? sinkChPort : 
+                  '9092',
+            database: sinkType === 'postgresql' ? sinkDbDatabase : 
+                     sinkType === 'clickhouse' ? sinkChDatabase : 
+                     sinkKafkaTopic,
+            username: sinkType === 'postgresql' ? sinkDbUsername : 
+                     sinkType === 'clickhouse' ? sinkChUsername : 
+                     '',
+            password: sinkType === 'postgresql' ? sinkDbPassword : 
+                     sinkType === 'clickhouse' ? sinkChPassword : 
+                     '',
+            table_name: sinkType === 'postgresql' ? sinkDbTableName : 
+                       sinkType === 'clickhouse' ? sinkChTableName : 
+                       sinkKafkaTopic
           }
           
           // Создаем DAG
@@ -427,35 +544,71 @@ export const useDataTransfer = () => {
           return // Выходим из функции, так как процесс асинхронный
         } else {
           // Обычная переливка в БД
-        endpoint = '/transfer/to-database'
-        formData = new FormData()
-        
-        // Параметры источника
-        formData.append('source_type', sourceType)
-        if (file) {
-          formData.append('file', file)
-        }
-        
-        // Параметры приёмника БД
-        formData.append('sink_connection_string', `postgresql://${sinkDbUsername}:${sinkDbPassword}@${sinkDbHost}:${sinkDbPort}/${sinkDbDatabase}`)
-        formData.append('sink_table_name', sinkDbTableName)
-        formData.append('sink_mode', 'append')
-        formData.append('chunk_size', chunkSize.toString())
-        formData.append('delimiter', sourceDelimiter)
-        formData.append('database_type', 'postgresql')
-        
-        // Если источник тоже БД
-        if (sourceType === 'database') {
-          if (!sourceDbHost || !sourceDbPort || !sourceDbDatabase || !sourceDbUsername || !sourceDbPassword) {
-            throw new Error('Пожалуйста, заполните все поля подключения к базе данных для источника')
+          endpoint = '/transfer/to-database'
+          formData = new FormData()
+          
+          // Параметры источника
+          formData.append('source_type', sourceType)
+          if (file) {
+            formData.append('file', file)
           }
-          formData.append('source_connection_string', `postgresql://${sourceDbUsername}:${sourceDbPassword}@${sourceDbHost}:${sourceDbPort}/${sourceDbDatabase}`)
-          formData.append('source_table_name', sourceDbTableName)
+          
+          // Параметры приёмника БД
+          formData.append('sink_mode', 'append')
+          formData.append('chunk_size', chunkSize.toString())
+          formData.append('delimiter', sourceDelimiter)
+          
+          // Определяем тип приёмника и добавляем соответствующие параметры
+          if (sinkType === 'postgresql') {
+            formData.append('sink_connection_string', `postgresql://${sinkDbUsername}:${sinkDbPassword}@${sinkDbHost}:${sinkDbPort}/${sinkDbDatabase}`)
+            formData.append('sink_table_name', sinkDbTableName)
+            formData.append('database_type', 'postgresql')
+          } else if (sinkType === 'clickhouse') {
+            formData.append('sink_host', sinkChHost)
+            formData.append('sink_port', sinkChPort)
+            formData.append('sink_database', sinkChDatabase)
+            formData.append('sink_username', sinkChUsername)
+            formData.append('sink_password', sinkChPassword)
+            formData.append('sink_table_name', sinkChTableName)
+            formData.append('database_type', 'clickhouse')
+          } else if (sinkType === 'kafka') {
+            formData.append('sink_bootstrap_servers', sinkKafkaBootstrapServers)
+            formData.append('sink_topic', sinkKafkaTopic)
+            formData.append('sink_key_field', sinkKafkaKeyField)
+            formData.append('database_type', 'kafka')
+          }
+          
+          // Если источник тоже БД
+          if (sourceType === 'postgresql') {
+            if (!sourceDbHost || !sourceDbPort || !sourceDbDatabase || !sourceDbUsername || !sourceDbPassword) {
+              throw new Error('Пожалуйста, заполните все поля подключения к базе данных для источника')
+            }
+            formData.append('source_connection_string', `postgresql://${sourceDbUsername}:${sourceDbPassword}@${sourceDbHost}:${sourceDbPort}/${sourceDbDatabase}`)
+            formData.append('source_table_name', sourceDbTableName)
+          } else if (sourceType === 'clickhouse') {
+            if (!sourceChHost || !sourceChPort || !sourceChDatabase || !sourceChUsername || !sourceChPassword) {
+              throw new Error('Пожалуйста, заполните все поля подключения к ClickHouse для источника')
+            }
+            formData.append('source_host', sourceChHost)
+            formData.append('source_port', sourceChPort)
+            formData.append('source_database', sourceChDatabase)
+            formData.append('source_username', sourceChUsername)
+            formData.append('source_password', sourceChPassword)
+            formData.append('source_table_name', sourceChTableName)
+          } else if (sourceType === 'kafka') {
+            if (!sourceKafkaBootstrapServers || !sourceKafkaTopic) {
+              throw new Error('Пожалуйста, заполните все поля подключения к Kafka для источника')
+            }
+            formData.append('source_bootstrap_servers', sourceKafkaBootstrapServers)
+            formData.append('source_topic', sourceKafkaTopic)
+            formData.append('source_group_id', sourceKafkaGroupId)
           }
         }
       } else {
         // Обычный перенос в файлы
+        console.log('DEBUG: Используем обычный перенос в файлы')
         endpoint = sinkType === 'preview' ? '/upload' : '/transfer'
+        console.log('DEBUG: endpoint =', endpoint)
         formData = new FormData()
         
         if (file) {
@@ -540,18 +693,43 @@ export const useDataTransfer = () => {
     setChunkSize(10)
     setSourceDelimiter(';')
     setSinkDelimiter(';')
+    // PostgreSQL источник
     setSourceDbHost('')
     setSourceDbPort('5432')
     setSourceDbDatabase('')
     setSourceDbUsername('')
     setSourceDbPassword('')
     setSourceDbTableName('')
+    // ClickHouse источник
+    setSourceChHost('')
+    setSourceChPort('8123')
+    setSourceChDatabase('')
+    setSourceChUsername('')
+    setSourceChPassword('')
+    setSourceChTableName('')
+    // Kafka источник
+    setSourceKafkaBootstrapServers('')
+    setSourceKafkaTopic('')
+    setSourceKafkaGroupId('')
+    // PostgreSQL приёмник
     setSinkDbHost('')
     setSinkDbPort('5432')
     setSinkDbDatabase('')
     setSinkDbUsername('')
     setSinkDbPassword('')
     setSinkDbTableName('')
+    // ClickHouse приёмник
+    setSinkChHost('')
+    setSinkChPort('8123')
+    setSinkChDatabase('')
+    setSinkChUsername('')
+    setSinkChPassword('')
+    setSinkChTableName('')
+    // Kafka приёмник
+    setSinkKafkaBootstrapServers('')
+    setSinkKafkaTopic('')
+    setSinkKafkaKeyField('')
+    setUseAirflow(false)
     setIsLoading(false)
     setError(null)
     setResult(null)
@@ -572,18 +750,42 @@ export const useDataTransfer = () => {
     chunkSize,
     sourceDelimiter,
     sinkDelimiter,
+    // PostgreSQL источник
     sourceDbHost,
     sourceDbPort,
     sourceDbDatabase,
     sourceDbUsername,
     sourceDbPassword,
     sourceDbTableName,
+    // ClickHouse источник
+    sourceChHost,
+    sourceChPort,
+    sourceChDatabase,
+    sourceChUsername,
+    sourceChPassword,
+    sourceChTableName,
+    // Kafka источник
+    sourceKafkaBootstrapServers,
+    sourceKafkaTopic,
+    sourceKafkaGroupId,
+    // PostgreSQL приёмник
     sinkDbHost,
     sinkDbPort,
     sinkDbDatabase,
     sinkDbUsername,
     sinkDbPassword,
     sinkDbTableName,
+    // ClickHouse приёмник
+    sinkChHost,
+    sinkChPort,
+    sinkChDatabase,
+    sinkChUsername,
+    sinkChPassword,
+    sinkChTableName,
+    // Kafka приёмник
+    sinkKafkaBootstrapServers,
+    sinkKafkaTopic,
+    sinkKafkaKeyField,
     useAirflow,
     isLoading,
     error,
@@ -595,18 +797,42 @@ export const useDataTransfer = () => {
     setChunkSize,
     setSourceDelimiter,
     setSinkDelimiter,
+    // PostgreSQL источник
     setSourceDbHost,
     setSourceDbPort,
     setSourceDbDatabase,
     setSourceDbUsername,
     setSourceDbPassword,
     setSourceDbTableName,
+    // ClickHouse источник
+    setSourceChHost,
+    setSourceChPort,
+    setSourceChDatabase,
+    setSourceChUsername,
+    setSourceChPassword,
+    setSourceChTableName,
+    // Kafka источник
+    setSourceKafkaBootstrapServers,
+    setSourceKafkaTopic,
+    setSourceKafkaGroupId,
+    // PostgreSQL приёмник
     setSinkDbHost,
     setSinkDbPort,
     setSinkDbDatabase,
     setSinkDbUsername,
     setSinkDbPassword,
     setSinkDbTableName,
+    // ClickHouse приёмник
+    setSinkChHost,
+    setSinkChPort,
+    setSinkChDatabase,
+    setSinkChUsername,
+    setSinkChPassword,
+    setSinkChTableName,
+    // Kafka приёмник
+    setSinkKafkaBootstrapServers,
+    setSinkKafkaTopic,
+    setSinkKafkaKeyField,
     setUseAirflow,
     handleTransfer,
     reset

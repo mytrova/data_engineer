@@ -1,0 +1,25 @@
+buffer:
+  memory:
+    batch_size: 10000
+input:
+  sql_select:
+    batch_count: 10000
+    columns:
+    - '*'
+    driver: postgresql
+    dsn: postgresql://api_user:secure_password@158.160.5.104:5432/api_db
+    table: from_json_big
+    where: 1=1
+output:
+  sql_insert:
+    batch_size: 10000
+    columns:
+    - '*'
+    driver: postgresql
+    dsn: postgresql://myuser:mypassword@158.160.5.104:8123/testdb
+    table: from_postgresql
+pipeline:
+  processors:
+  - mapping:
+      mapping: root = this
+      root: .

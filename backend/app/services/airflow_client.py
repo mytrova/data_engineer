@@ -634,15 +634,55 @@ class AirflowClient:
         return f"http://localhost:8081/dags/{dag_id}/grid"
     
     async def delete_dag(self, dag_id: str) -> bool:
-        """Удаление DAG (демо-режим)"""
-        # Удаляем из кэша
-        if dag_id in self._dag_status_cache:
-            del self._dag_status_cache[dag_id]
-            print(f"DAG {dag_id} удален из кэша")
-        
-        print(f"Демо-режим: Удаление DAG {dag_id}")
-        await asyncio.sleep(1)  # Имитация задержки
-        return True
+        """Удаление DAG"""
+        try:
+            # Удаляем из кэша
+            if dag_id in self._dag_status_cache:
+                del self._dag_status_cache[dag_id]
+                print(f"DAG {dag_id} удален из кэша")
+            
+            # Пытаемся удалить через API
+            try:
+                session = await self._get_session()
+                response = await session.delete(f"/api/v1/dags/{dag_id}")
+                if response.status_code == 204:
+                    print(f"DAG {dag_id} успешно удален через API")
+                    return True
+                else:
+                    print(f"API вернул статус {response.status_code} для удаления DAG {dag_id}")
+            except Exception as api_error:
+                print(f"Ошибка при удалении DAG {dag_id} через API: {api_error}")
+            
+            # Fallback - удаляем через CLI
+            try:
+                import docker
+                client = docker.from_env()
+                container = client.containers.get("data-orchestrator-airflow")
+                
+                # Удаляем DAG файл
+                result = container.exec_run(f"rm -f /opt/airflow/dags/{dag_id}.py")
+                if result.exit_code == 0:
+                    print(f"DAG файл {dag_id}.py удален через CLI")
+                    
+                    # Обновляем DAG'и в Airflow
+                    reserialize_result = container.exec_run("airflow dags reserialize")
+                    if reserialize_result.exit_code == 0:
+                        print(f"DAG'и обновлены в Airflow после удаления {dag_id}")
+                    else:
+                        print(f"Предупреждение: не удалось обновить DAG'и в Airflow: {reserialize_result.output.decode('utf-8')}")
+                    
+                    return True
+                else:
+                    print(f"Ошибка при удалении DAG файла через CLI: {result.output.decode('utf-8')}")
+                    return False
+                    
+            except Exception as cli_error:
+                print(f"Ошибка при удалении DAG {dag_id} через CLI: {cli_error}")
+                return False
+                
+        except Exception as e:
+            print(f"Общая ошибка при удалении DAG {dag_id}: {e}")
+            return False
 
 
 # Глобальный экземпляр клиента

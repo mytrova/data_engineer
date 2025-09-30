@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 import os
+import logging
 from typing import Any, Dict, List, Optional
 from datetime import datetime
 from pydantic import BaseModel
@@ -14,10 +15,14 @@ from .services.json_source import JSONSource
 from .services.xml_source import XMLSource
 from .services.postgres_source import PostgreSQLSource
 from .services.postgres_sink import PostgreSQLSink
+from .services.clickhouse_source import ClickHouseSource
+from .services.clickhouse_sink import ClickHouseSink
+from .services.kafka_source import KafkaSource
+from .services.kafka_sink import KafkaSink
 from .services.base import DataSink
 from .services.file_sinks import CSVFileSink, JSONFileSink, XMLFileSink
 from .services.airflow_client import airflow_client
-from .services.airflow_dag_generator import AirflowDAGGenerator
+from .services.airflow_dag_generator_simple import AirflowDAGGeneratorSimple
 from .services.sqlite_service import sqlite_service
 from .services.large_file_processor import large_file_processor
 
@@ -41,8 +46,11 @@ app = FastAPI(
     max_request_size=1024 * 1024 * 1024,  # 1GB
 )
 
+# Настройка логирования
+logger = logging.getLogger(__name__)
+
 # Инициализация DAG генератора
-dag_generator = AirflowDAGGenerator()
+dag_generator = AirflowDAGGeneratorSimple()
 
 # Pydantic модели
 class DAGGenerationRequest(BaseModel):
@@ -68,12 +76,28 @@ def health() -> Dict[str, str]:
 
 @app.post("/database/connect")
 async def test_database_connection(
-    connection_string: str = Form(...),
-    database_type: str = Form("postgresql")
+    connection_string: str = Form(None),
+    database_type: str = Form("postgresql"),
+    # ClickHouse параметры
+    host: str = Form(None),
+    port: str = Form(None),
+    database: str = Form(None),
+    username: str = Form(None),
+    password: str = Form(None),
+    # Kafka параметры
+    bootstrap_servers: str = Form(None),
+    topic: str = Form(None),
+    group_id: str = Form(None)
 ):
     """Тестирование подключения к базе данных"""
     try:
         if database_type.lower() == "postgresql":
+            if not connection_string:
+                return JSONResponse({
+                    "status": "error",
+                    "error": "Не указана строка подключения"
+                }, status_code=400)
+            
             source = PostgreSQLSource(connection_string)
             is_connected = source.test_connection()
             tables = source.get_tables() if is_connected else []
@@ -84,6 +108,42 @@ async def test_database_connection(
                 "tables": tables,
                 "database_type": "postgresql"
             })
+            
+        elif database_type.lower() == "clickhouse":
+            if not all([host, port, database, username, password]):
+                return JSONResponse({
+                    "status": "error",
+                    "error": "Не указаны все параметры подключения к ClickHouse"
+                }, status_code=400)
+            
+            source = ClickHouseSource(host, int(port), database, username, password)
+            is_connected = source.test_connection()
+            tables = source.get_tables() if is_connected else []
+            
+            return JSONResponse({
+                "status": "success" if is_connected else "error",
+                "connected": is_connected,
+                "tables": tables,
+                "database_type": "clickhouse"
+            })
+            
+        elif database_type.lower() == "kafka":
+            if not all([bootstrap_servers, topic]):
+                return JSONResponse({
+                    "status": "error",
+                    "error": "Не указаны bootstrap_servers и topic для Kafka"
+                }, status_code=400)
+            
+            source = KafkaSource(bootstrap_servers, topic, group_id)
+            is_connected = source.test_connection()
+            topics = source.get_topics() if is_connected else []
+            
+            return JSONResponse({
+                "status": "success" if is_connected else "error",
+                "connected": is_connected,
+                "topics": topics,
+                "database_type": "kafka"
+            })
         else:
             return JSONResponse({
                 "status": "error",
@@ -91,6 +151,11 @@ async def test_database_connection(
             }, status_code=400)
             
     except Exception as e:
+        import traceback
+        error_details = traceback.format_exc()
+        logger.error(f"=== ОШИБКА В ГЕНЕРАЦИИ DAG ===")
+        logger.error(f"Ошибка: {str(e)}")
+        logger.error(f"Детали: {error_details}")
         return JSONResponse({
             "status": "error",
             "error": str(e)
@@ -119,6 +184,45 @@ async def get_database_tables(
             }, status_code=400)
             
     except Exception as e:
+        import traceback
+        error_details = traceback.format_exc()
+        logger.error(f"=== ОШИБКА В ГЕНЕРАЦИИ DAG ===")
+        logger.error(f"Ошибка: {str(e)}")
+        logger.error(f"Детали: {error_details}")
+        return JSONResponse({
+            "status": "error",
+            "error": str(e)
+        }, status_code=500)
+
+
+@app.post("/database/topic-info")
+async def get_topic_info(
+    bootstrap_servers: str = Form(...),
+    topic: str = Form(...),
+    database_type: str = Form("kafka")
+):
+    """Получение информации о топике Kafka"""
+    try:
+        if database_type.lower() == "kafka":
+            source = KafkaSource(bootstrap_servers, topic)
+            topic_info = source.get_topic_info(topic)
+            
+            return JSONResponse({
+                "status": "success",
+                "topic_info": topic_info
+            })
+        else:
+            return JSONResponse({
+                "status": "error",
+                "error": f"Неподдерживаемый тип для получения информации о топике: {database_type}"
+            }, status_code=400)
+            
+    except Exception as e:
+        import traceback
+        error_details = traceback.format_exc()
+        logger.error(f"=== ОШИБКА В ГЕНЕРАЦИИ DAG ===")
+        logger.error(f"Ошибка: {str(e)}")
+        logger.error(f"Детали: {error_details}")
         return JSONResponse({
             "status": "error",
             "error": str(e)
@@ -127,14 +231,42 @@ async def get_database_tables(
 
 @app.post("/database/schema")
 async def get_table_schema(
-    connection_string: str = Form(...),
+    connection_string: str = Form(None),
     table_name: str = Form(...),
-    database_type: str = Form("postgresql")
+    database_type: str = Form("postgresql"),
+    # ClickHouse параметры
+    host: str = Form(None),
+    port: str = Form(None),
+    database: str = Form(None),
+    username: str = Form(None),
+    password: str = Form(None)
 ):
     """Получение схемы таблицы"""
     try:
         if database_type.lower() == "postgresql":
+            if not connection_string:
+                return JSONResponse({
+                    "status": "error",
+                    "error": "Не указана строка подключения"
+                }, status_code=400)
+            
             source = PostgreSQLSource(connection_string)
+            schema = source.get_table_schema(table_name)
+            
+            return JSONResponse({
+                "status": "success",
+                "table_name": table_name,
+                "schema": schema
+            })
+            
+        elif database_type.lower() == "clickhouse":
+            if not all([host, port, database, username, password]):
+                return JSONResponse({
+                    "status": "error",
+                    "error": "Не указаны все параметры подключения к ClickHouse"
+                }, status_code=400)
+            
+            source = ClickHouseSource(host, int(port), database, username, password)
             schema = source.get_table_schema(table_name)
             
             return JSONResponse({
@@ -149,6 +281,11 @@ async def get_table_schema(
             }, status_code=400)
             
     except Exception as e:
+        import traceback
+        error_details = traceback.format_exc()
+        logger.error(f"=== ОШИБКА В ГЕНЕРАЦИИ DAG ===")
+        logger.error(f"Ошибка: {str(e)}")
+        logger.error(f"Детали: {error_details}")
         return JSONResponse({
             "status": "error",
             "error": str(e)
@@ -179,6 +316,11 @@ async def execute_database_query(
             }, status_code=400)
             
     except Exception as e:
+        import traceback
+        error_details = traceback.format_exc()
+        logger.error(f"=== ОШИБКА В ГЕНЕРАЦИИ DAG ===")
+        logger.error(f"Ошибка: {str(e)}")
+        logger.error(f"Детали: {error_details}")
         return JSONResponse({
             "status": "error",
             "error": str(e)
@@ -208,6 +350,11 @@ async def upload_csv(
                 "file_path": result["file_path"]
             })
         except Exception as e:
+            import traceback
+            error_details = traceback.format_exc()
+            logger.error(f"=== ОШИБКА В ГЕНЕРАЦИИ DAG ===")
+            logger.error(f"Ошибка: {str(e)}")
+            logger.error(f"Детали: {error_details}")
             return JSONResponse({
                 "status": "error",
                 "error": f"Ошибка при обработке большого файла: {str(e)}"
@@ -250,6 +397,11 @@ async def get_large_files():
             "files": files
         })
     except Exception as e:
+        import traceback
+        error_details = traceback.format_exc()
+        logger.error(f"=== ОШИБКА В ГЕНЕРАЦИИ DAG ===")
+        logger.error(f"Ошибка: {str(e)}")
+        logger.error(f"Детали: {error_details}")
         return JSONResponse({
             "status": "error",
             "error": str(e)
@@ -289,6 +441,11 @@ async def delete_large_file(file_id: int):
         })
         
     except Exception as e:
+        import traceback
+        error_details = traceback.format_exc()
+        logger.error(f"=== ОШИБКА В ГЕНЕРАЦИИ DAG ===")
+        logger.error(f"Ошибка: {str(e)}")
+        logger.error(f"Детали: {error_details}")
         return JSONResponse({
             "status": "error",
             "error": str(e)
@@ -313,6 +470,11 @@ async def get_large_file_info(file_id: int):
                 "error": f"Файл с ID {file_id} не найден"
             }, status_code=404)
     except Exception as e:
+        import traceback
+        error_details = traceback.format_exc()
+        logger.error(f"=== ОШИБКА В ГЕНЕРАЦИИ DAG ===")
+        logger.error(f"Ошибка: {str(e)}")
+        logger.error(f"Детали: {error_details}")
         return JSONResponse({
             "status": "error",
             "error": str(e)
@@ -329,6 +491,11 @@ async def get_file_processing_logs(file_id: int, limit: int = 100):
             "logs": logs
         })
     except Exception as e:
+        import traceback
+        error_details = traceback.format_exc()
+        logger.error(f"=== ОШИБКА В ГЕНЕРАЦИИ DAG ===")
+        logger.error(f"Ошибка: {str(e)}")
+        logger.error(f"Детали: {error_details}")
         return JSONResponse({
             "status": "error",
             "error": str(e)
@@ -345,6 +512,11 @@ async def get_file_table_data(file_id: int, limit: int = 1000, offset: int = 0):
             "data": data
         })
     except Exception as e:
+        import traceback
+        error_details = traceback.format_exc()
+        logger.error(f"=== ОШИБКА В ГЕНЕРАЦИИ DAG ===")
+        logger.error(f"Ошибка: {str(e)}")
+        logger.error(f"Детали: {error_details}")
         return JSONResponse({
             "status": "error",
             "error": str(e)
@@ -361,6 +533,11 @@ async def get_file_cached_data(file_id: int, limit: int = 1000):
             "data": data
         })
     except Exception as e:
+        import traceback
+        error_details = traceback.format_exc()
+        logger.error(f"=== ОШИБКА В ГЕНЕРАЦИИ DAG ===")
+        logger.error(f"Ошибка: {str(e)}")
+        logger.error(f"Детали: {error_details}")
         return JSONResponse({
             "status": "error",
             "error": str(e)
@@ -377,6 +554,11 @@ async def get_all_processing_status():
             "processing_status": status
         })
     except Exception as e:
+        import traceback
+        error_details = traceback.format_exc()
+        logger.error(f"=== ОШИБКА В ГЕНЕРАЦИИ DAG ===")
+        logger.error(f"Ошибка: {str(e)}")
+        logger.error(f"Детали: {error_details}")
         return JSONResponse({
             "status": "error",
             "error": str(e)
@@ -407,6 +589,11 @@ async def transfer(
                 "file_path": result["file_path"]
             })
         except Exception as e:
+            import traceback
+            error_details = traceback.format_exc()
+            logger.error(f"=== ОШИБКА В ГЕНЕРАЦИИ DAG ===")
+            logger.error(f"Ошибка: {str(e)}")
+            logger.error(f"Детали: {error_details}")
             return JSONResponse({
                 "status": "error",
                 "error": f"Ошибка при обработке большого файла: {str(e)}"
@@ -468,13 +655,33 @@ async def transfer_to_database(
     source_connection_string: str = Form(None),
     source_table_name: str = Form(None),
     source_query: str = Form(None),
-    sink_connection_string: str = Form(...),
-    sink_table_name: str = Form(...),
+    sink_connection_string: str = Form(None),
+    sink_table_name: str = Form(None),
     sink_mode: str = Form("append"),
     chunk_size: int = Form(1000),
     file: UploadFile = File(None),
     delimiter: str = Form(";"),
-    database_type: str = Form("postgresql")
+    database_type: str = Form("postgresql"),
+    # ClickHouse параметры приёмника
+    sink_host: str = Form(None),
+    sink_port: str = Form(None),
+    sink_database: str = Form(None),
+    sink_username: str = Form(None),
+    sink_password: str = Form(None),
+    # Kafka параметры приёмника
+    sink_bootstrap_servers: str = Form(None),
+    sink_topic: str = Form(None),
+    sink_key_field: str = Form(None),
+    # ClickHouse параметры источника
+    source_host: str = Form(None),
+    source_port: str = Form(None),
+    source_database: str = Form(None),
+    source_username: str = Form(None),
+    source_password: str = Form(None),
+    # Kafka параметры источника
+    source_bootstrap_servers: str = Form(None),
+    source_topic: str = Form(None),
+    source_group_id: str = Form(None)
 ):
     """Перенос данных в базу данных PostgreSQL"""
     try:
@@ -507,12 +714,37 @@ async def transfer_to_database(
                 source = PostgreSQLSource(source_connection_string, query=source_query)
             else:
                 return JSONResponse({"error": "Для PostgreSQL источника нужны table_name или query"}, status_code=400)
+        elif source_type.lower() == "clickhouse":
+            if not all([source_host, source_port, source_database, source_username, source_password]):
+                return JSONResponse({"error": "Для ClickHouse источника нужны все параметры подключения"}, status_code=400)
+            
+            if source_table_name:
+                source = ClickHouseSource(source_host, int(source_port), source_database, source_username, source_password, table_name=source_table_name)
+            elif source_query:
+                source = ClickHouseSource(source_host, int(source_port), source_database, source_username, source_password, query=source_query)
+            else:
+                return JSONResponse({"error": "Для ClickHouse источника нужны table_name или query"}, status_code=400)
+        elif source_type.lower() == "kafka":
+            if not all([source_bootstrap_servers, source_topic]):
+                return JSONResponse({"error": "Для Kafka источника нужны bootstrap_servers и topic"}, status_code=400)
+            
+            source = KafkaSource(source_bootstrap_servers, source_topic, source_group_id)
         else:
             return JSONResponse({"error": f"Неподдерживаемый источник: {source_type}"}, status_code=400)
         
         # Создаем приёмник данных
         if database_type.lower() == "postgresql":
+            if not sink_connection_string or not sink_table_name:
+                return JSONResponse({"error": "Для PostgreSQL приёмника нужны connection_string и table_name"}, status_code=400)
             sink = PostgreSQLSink(sink_connection_string, sink_table_name, sink_mode)
+        elif database_type.lower() == "clickhouse":
+            if not all([sink_host, sink_port, sink_database, sink_username, sink_password, sink_table_name]):
+                return JSONResponse({"error": "Для ClickHouse приёмника нужны все параметры подключения"}, status_code=400)
+            sink = ClickHouseSink(sink_host, int(sink_port), sink_database, sink_username, sink_password, sink_table_name, sink_mode)
+        elif database_type.lower() == "kafka":
+            if not all([sink_bootstrap_servers, sink_topic]):
+                return JSONResponse({"error": "Для Kafka приёмника нужны bootstrap_servers и topic"}, status_code=400)
+            sink = KafkaSink(sink_bootstrap_servers, sink_topic, sink_key_field)
         else:
             return JSONResponse({"error": f"Неподдерживаемый тип базы данных: {database_type}"}, status_code=400)
         
@@ -535,6 +767,11 @@ async def transfer_to_database(
             })
             
     except Exception as e:
+        import traceback
+        error_details = traceback.format_exc()
+        logger.error(f"=== ОШИБКА В ГЕНЕРАЦИИ DAG ===")
+        logger.error(f"Ошибка: {str(e)}")
+        logger.error(f"Детали: {error_details}")
         return JSONResponse({
             "status": "error",
             "error": str(e)
@@ -553,6 +790,11 @@ async def get_airflow_dags():
             "dags": dags
         })
     except Exception as e:
+        import traceback
+        error_details = traceback.format_exc()
+        logger.error(f"=== ОШИБКА В ГЕНЕРАЦИИ DAG ===")
+        logger.error(f"Ошибка: {str(e)}")
+        logger.error(f"Детали: {error_details}")
         return JSONResponse({
             "status": "error",
             "error": str(e)
@@ -575,6 +817,11 @@ async def get_dag_status(dag_id: str):
                 "error": f"DAG {dag_id} не найден"
             }, status_code=404)
     except Exception as e:
+        import traceback
+        error_details = traceback.format_exc()
+        logger.error(f"=== ОШИБКА В ГЕНЕРАЦИИ DAG ===")
+        logger.error(f"Ошибка: {str(e)}")
+        logger.error(f"Детали: {error_details}")
         return JSONResponse({
             "status": "error",
             "error": str(e)
@@ -592,6 +839,11 @@ async def get_dag_runs(dag_id: str, limit: int = 10):
             "runs": runs
         })
     except Exception as e:
+        import traceback
+        error_details = traceback.format_exc()
+        logger.error(f"=== ОШИБКА В ГЕНЕРАЦИИ DAG ===")
+        logger.error(f"Ошибка: {str(e)}")
+        logger.error(f"Детали: {error_details}")
         return JSONResponse({
             "status": "error",
             "error": str(e)
@@ -615,6 +867,11 @@ async def trigger_dag(dag_id: str):
                 "error": f"Не удалось запустить DAG {dag_id}"
             }, status_code=500)
     except Exception as e:
+        import traceback
+        error_details = traceback.format_exc()
+        logger.error(f"=== ОШИБКА В ГЕНЕРАЦИИ DAG ===")
+        logger.error(f"Ошибка: {str(e)}")
+        logger.error(f"Детали: {error_details}")
         return JSONResponse({
             "status": "error",
             "error": str(e)
@@ -637,6 +894,11 @@ async def pause_dag(dag_id: str):
                 "error": f"Не удалось приостановить DAG {dag_id}"
             }, status_code=500)
     except Exception as e:
+        import traceback
+        error_details = traceback.format_exc()
+        logger.error(f"=== ОШИБКА В ГЕНЕРАЦИИ DAG ===")
+        logger.error(f"Ошибка: {str(e)}")
+        logger.error(f"Детали: {error_details}")
         return JSONResponse({
             "status": "error",
             "error": str(e)
@@ -659,6 +921,11 @@ async def unpause_dag(dag_id: str):
                 "error": f"Не удалось возобновить DAG {dag_id}"
             }, status_code=500)
     except Exception as e:
+        import traceback
+        error_details = traceback.format_exc()
+        logger.error(f"=== ОШИБКА В ГЕНЕРАЦИИ DAG ===")
+        logger.error(f"Ошибка: {str(e)}")
+        logger.error(f"Детали: {error_details}")
         return JSONResponse({
             "status": "error",
             "error": str(e)
@@ -676,6 +943,11 @@ async def get_dag_ui_url(dag_id: str):
             "ui_url": ui_url
         })
     except Exception as e:
+        import traceback
+        error_details = traceback.format_exc()
+        logger.error(f"=== ОШИБКА В ГЕНЕРАЦИИ DAG ===")
+        logger.error(f"Ошибка: {str(e)}")
+        logger.error(f"Детали: {error_details}")
         return JSONResponse({
             "status": "error",
             "error": str(e)
@@ -692,6 +964,11 @@ async def get_airflow_ui_url():
             "ui_url": ui_url
         })
     except Exception as e:
+        import traceback
+        error_details = traceback.format_exc()
+        logger.error(f"=== ОШИБКА В ГЕНЕРАЦИИ DAG ===")
+        logger.error(f"Ошибка: {str(e)}")
+        logger.error(f"Детали: {error_details}")
         return JSONResponse({
             "status": "error",
             "error": str(e)
@@ -710,6 +987,11 @@ async def get_dag_tasks(dag_id: str, dag_run_id: str):
             "tasks": tasks
         })
     except Exception as e:
+        import traceback
+        error_details = traceback.format_exc()
+        logger.error(f"=== ОШИБКА В ГЕНЕРАЦИИ DAG ===")
+        logger.error(f"Ошибка: {str(e)}")
+        logger.error(f"Детали: {error_details}")
         return JSONResponse({
             "status": "error",
             "error": str(e)
@@ -776,6 +1058,11 @@ async def upload_large_file(
         })
         
     except Exception as e:
+        import traceback
+        error_details = traceback.format_exc()
+        logger.error(f"=== ОШИБКА В ГЕНЕРАЦИИ DAG ===")
+        logger.error(f"Ошибка: {str(e)}")
+        logger.error(f"Детали: {error_details}")
         print(f"DEBUG: Ошибка при обработке большого файла: {str(e)}")
         import traceback
         traceback.print_exc()
@@ -800,6 +1087,11 @@ async def get_large_file_status(process_id: str):
             "process_status": status
         })
     except Exception as e:
+        import traceback
+        error_details = traceback.format_exc()
+        logger.error(f"=== ОШИБКА В ГЕНЕРАЦИИ DAG ===")
+        logger.error(f"Ошибка: {str(e)}")
+        logger.error(f"Детали: {error_details}")
         return JSONResponse({
             "status": "error",
             "error": f"Ошибка при получении статуса: {str(e)}"
@@ -817,6 +1109,11 @@ async def get_all_large_file_status():
             "processes": all_status
         })
     except Exception as e:
+        import traceback
+        error_details = traceback.format_exc()
+        logger.error(f"=== ОШИБКА В ГЕНЕРАЦИИ DAG ===")
+        logger.error(f"Ошибка: {str(e)}")
+        logger.error(f"Детали: {error_details}")
         print(f"DEBUG: Ошибка при получении статусов: {str(e)}")
         import traceback
         traceback.print_exc()
@@ -857,6 +1154,11 @@ async def upload_file_for_airflow(file: UploadFile = File(...)):
                     "file_path": result["file_path"]
                 })
             except Exception as e:
+                import traceback
+                error_details = traceback.format_exc()
+                logger.error(f"=== ОШИБКА В ГЕНЕРАЦИИ DAG ===")
+                logger.error(f"Ошибка: {str(e)}")
+                logger.error(f"Детали: {error_details}")
                 return JSONResponse({
                     "status": "error",
                     "error": f"Ошибка при обработке большого файла: {str(e)}"
@@ -898,6 +1200,11 @@ async def upload_file_for_airflow(file: UploadFile = File(...)):
         })
         
     except Exception as e:
+        import traceback
+        error_details = traceback.format_exc()
+        logger.error(f"=== ОШИБКА В ГЕНЕРАЦИИ DAG ===")
+        logger.error(f"Ошибка: {str(e)}")
+        logger.error(f"Детали: {error_details}")
         return JSONResponse({
             "status": "error",
             "error": f"Ошибка при загрузке файла: {str(e)}"
@@ -919,14 +1226,24 @@ async def generate_airflow_dag(request: DAGGenerationRequest):
         timestamp = datetime.now().strftime("%Y%m%d_%H%M%S")
         dag_id = f"data_transfer_{timestamp}"
         
-        # Создаем DAG
-        dag_file_path = dag_generator.generate_data_transfer_dag(
+        # Создаем и сохраняем DAG
+        logger.info(f"Создаем DAG с ID: {dag_id}")
+        dag_file_path = dag_generator.generate_and_save_dag(
             dag_id=dag_id,
             source_config=source_config,
             sink_config=sink_config,
             chunk_size=chunk_size,
             total_rows=total_rows
         )
+        
+        logger.info(f"DAG создан и сохранен в: {dag_file_path}")
+        
+        # Проверяем, что файл действительно создался
+        if os.path.exists(dag_file_path):
+            file_size = os.path.getsize(dag_file_path)
+            logger.info(f"Файл DAG существует, размер: {file_size} байт")
+        else:
+            logger.error(f"Файл DAG не найден: {dag_file_path}")
         
         return JSONResponse({
             "status": "success",
@@ -936,6 +1253,11 @@ async def generate_airflow_dag(request: DAGGenerationRequest):
         })
         
     except Exception as e:
+        import traceback
+        error_details = traceback.format_exc()
+        logger.error(f"=== ОШИБКА В ГЕНЕРАЦИИ DAG ===")
+        logger.error(f"Ошибка: {str(e)}")
+        logger.error(f"Детали: {error_details}")
         return JSONResponse({
             "status": "error",
             "error": f"Ошибка при создании DAG: {str(e)}"
@@ -952,6 +1274,11 @@ async def get_generated_dags():
             "dags": dags
         })
     except Exception as e:
+        import traceback
+        error_details = traceback.format_exc()
+        logger.error(f"=== ОШИБКА В ГЕНЕРАЦИИ DAG ===")
+        logger.error(f"Ошибка: {str(e)}")
+        logger.error(f"Детали: {error_details}")
         return JSONResponse({
             "status": "error",
             "error": str(e)
@@ -975,6 +1302,11 @@ async def get_dag_info(dag_id: str):
                 "error": f"DAG {dag_id} не найден"
             }, status_code=404)
     except Exception as e:
+        import traceback
+        error_details = traceback.format_exc()
+        logger.error(f"=== ОШИБКА В ГЕНЕРАЦИИ DAG ===")
+        logger.error(f"Ошибка: {str(e)}")
+        logger.error(f"Детали: {error_details}")
         return JSONResponse({
             "status": "error",
             "error": f"Ошибка при получении информации о DAG: {str(e)}"
@@ -985,26 +1317,65 @@ async def get_dag_info(dag_id: str):
 async def delete_dag(dag_id: str):
     """Удаление DAG"""
     try:
+        logger.info(f"=== НАЧАЛО УДАЛЕНИЯ DAG ===")
+        logger.info(f"DAG ID: {dag_id}")
+        
         # Удаляем файл DAG'а
         success = dag_generator.delete_dag(dag_id)
         if success:
             # Также удаляем из Airflow (если возможно)
-            await airflow_client.delete_dag(dag_id)
+            try:
+                await airflow_client.delete_dag(dag_id)
+                logger.info(f"DAG {dag_id} удален из Airflow")
+            except Exception as e:
+                logger.warning(f"Не удалось удалить DAG из Airflow: {e}")
+            
+            # Принудительно обновляем DAG'и в Airflow
+            try:
+                await airflow_client.reserialize_dags()
+                logger.info("DAG'и обновлены в Airflow после удаления")
+            except Exception as e:
+                logger.warning(f"Не удалось обновить DAG'и в Airflow: {e}")
+            
+            logger.info(f"DAG {dag_id} успешно удален")
             return JSONResponse({
                 "status": "success",
                 "message": f"DAG {dag_id} удален"
             })
         else:
+            logger.warning(f"DAG {dag_id} не найден")
             return JSONResponse({
                 "status": "error",
                 "error": f"DAG {dag_id} не найден"
             }, status_code=404)
     except Exception as e:
+        import traceback
+        error_details = traceback.format_exc()
+        logger.error(f"=== ОШИБКА ПРИ УДАЛЕНИИ DAG ===")
+        logger.error(f"DAG ID: {dag_id}")
+        logger.error(f"Ошибка: {str(e)}")
+        logger.error(f"Детали: {error_details}")
         return JSONResponse({
             "status": "error",
             "error": str(e)
         }, status_code=500)
 
+
+@app.get("/airflow/dags/files")
+async def get_dag_files():
+    """Получение списка всех DAG файлов"""
+    try:
+        files = dag_generator.list_generated_dags()
+        return JSONResponse({
+            "status": "success",
+            "files": files
+        })
+    except Exception as e:
+        logger.error(f"Ошибка при получении списка DAG файлов: {e}")
+        return JSONResponse({
+            "status": "error",
+            "error": str(e)
+        }, status_code=500)
 
 @app.post("/airflow/dags/reserialize")
 async def reserialize_dags():
@@ -1032,6 +1403,11 @@ async def reserialize_dags():
             }, status_code=500)
             
     except Exception as e:
+        import traceback
+        error_details = traceback.format_exc()
+        logger.error(f"=== ОШИБКА В ГЕНЕРАЦИИ DAG ===")
+        logger.error(f"Ошибка: {str(e)}")
+        logger.error(f"Детали: {error_details}")
         return JSONResponse({
             "status": "error",
             "error": f"Ошибка при обновлении DAG'ов: {str(e)}"
@@ -1082,6 +1458,11 @@ async def trigger_dag_real(dag_id: str):
             }, status_code=500)
             
     except Exception as e:
+        import traceback
+        error_details = traceback.format_exc()
+        logger.error(f"=== ОШИБКА В ГЕНЕРАЦИИ DAG ===")
+        logger.error(f"Ошибка: {str(e)}")
+        logger.error(f"Детали: {error_details}")
         return JSONResponse({
             "status": "error",
             "error": f"Ошибка при выполнении CLI команды: {str(e)}"
@@ -1114,6 +1495,11 @@ async def pause_large_file_process(process_id: str):
         })
         
     except Exception as e:
+        import traceback
+        error_details = traceback.format_exc()
+        logger.error(f"=== ОШИБКА В ГЕНЕРАЦИИ DAG ===")
+        logger.error(f"Ошибка: {str(e)}")
+        logger.error(f"Детали: {error_details}")
         return JSONResponse({
             "status": "error",
             "error": f"Ошибка при приостановке процесса: {str(e)}"
@@ -1146,6 +1532,11 @@ async def resume_large_file_process(process_id: str):
         })
         
     except Exception as e:
+        import traceback
+        error_details = traceback.format_exc()
+        logger.error(f"=== ОШИБКА В ГЕНЕРАЦИИ DAG ===")
+        logger.error(f"Ошибка: {str(e)}")
+        logger.error(f"Детали: {error_details}")
         return JSONResponse({
             "status": "error",
             "error": f"Ошибка при возобновлении процесса: {str(e)}"
@@ -1176,6 +1567,11 @@ async def delete_large_file_process(process_id: str):
         })
         
     except Exception as e:
+        import traceback
+        error_details = traceback.format_exc()
+        logger.error(f"=== ОШИБКА В ГЕНЕРАЦИИ DAG ===")
+        logger.error(f"Ошибка: {str(e)}")
+        logger.error(f"Детали: {error_details}")
         return JSONResponse({
             "status": "error",
             "error": f"Ошибка при удалении процесса: {str(e)}"

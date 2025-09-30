@@ -1,0 +1,224 @@
+from __future__ import annotations
+
+from typing import Any, Iterable, List, Sequence
+from .base import DataSink
+import requests
+import logging
+
+logger = logging.getLogger(__name__)
+
+
+class ClickHouseSink(DataSink):
+    """Приёмник данных в ClickHouse"""
+    
+    def __init__(self, host: str, port: int, database: str, username: str, password: str, table_name: str, mode: str = "append"):
+        self.host = host
+        self.port = port
+        self.database = database
+        self.username = username
+        self.password = password
+        self.table_name = table_name
+        self.mode = mode  # "append", "replace"
+        self._connected = False
+        
+        # Тестируем подключение
+        if self.test_connection():
+            self._connected = True
+        else:
+            raise ConnectionError("Не удалось подключиться к ClickHouse")
+    
+    def _get_base_url(self) -> str:
+        """Получает базовый URL для ClickHouse HTTP API"""
+        return f"http://{self.username}:{self.password}@{self.host}:{self.port}/{self.database}"
+    
+    def write(self, headers: Sequence[str], rows: Iterable[Sequence[Any]]) -> Any:
+        """Запись данных в таблицу"""
+        try:
+            rows_list = list(rows)
+            if not rows_list:
+                return {
+                    "status": "success",
+                    "table": self.table_name,
+                    "rows_written": 0,
+                    "mode": self.mode
+                }
+            
+            # Подготавливаем данные для вставки
+            values = []
+            for row in rows_list:
+                escaped_row = []
+                for value in row:
+                    if value is None:
+                        escaped_row.append("NULL")
+                    elif isinstance(value, str):
+                        # Экранируем специальные символы
+                        escaped_value = str(value).replace("'", "''").replace("\\", "\\\\")
+                        escaped_row.append(f"'{escaped_value}'")
+                    else:
+                        escaped_row.append(str(value))
+                
+                values.append(f"({', '.join(escaped_row)})")
+            
+            # Формируем INSERT запрос
+            columns = ", ".join(headers)
+            insert_query = f"INSERT INTO {self.table_name} ({columns}) VALUES {', '.join(values)}"
+            
+            response = requests.post(f"{self._get_base_url()}/", data=insert_query)
+            
+            if response.status_code == 200:
+                return {
+                    "status": "success",
+                    "table": self.table_name,
+                    "rows_written": len(rows_list),
+                    "mode": self.mode
+                }
+            else:
+                return {
+                    "status": "error",
+                    "error": f"HTTP {response.status_code}: {response.text}",
+                    "table": self.table_name
+                }
+                
+        except Exception as e:
+            return {
+                "status": "error",
+                "error": str(e),
+                "table": self.table_name
+            }
+    
+    def write_chunks(self, headers: Sequence[str], chunks: Iterable[List[Sequence[Any]]]) -> Any:
+        """Запись данных чанками"""
+        try:
+            total_rows = 0
+            
+            for chunk in chunks:
+                if not chunk:  # Пропускаем пустые чанки
+                    continue
+                
+                # Подготавливаем данные для вставки
+                values = []
+                for row in chunk:
+                    escaped_row = []
+                    for value in row:
+                        if value is None:
+                            escaped_row.append("NULL")
+                        elif isinstance(value, str):
+                            # Экранируем специальные символы
+                            escaped_value = str(value).replace("'", "''").replace("\\", "\\\\")
+                            escaped_row.append(f"'{escaped_value}'")
+                        else:
+                            escaped_row.append(str(value))
+                    
+                    values.append(f"({', '.join(escaped_row)})")
+                
+                # Формируем INSERT запрос для чанка
+                columns = ", ".join(headers)
+                insert_query = f"INSERT INTO {self.table_name} ({columns}) VALUES {', '.join(values)}"
+                
+                response = requests.post(f"{self._get_base_url()}/", data=insert_query)
+                
+                if response.status_code != 200:
+                    return {
+                        "status": "error",
+                        "error": f"HTTP {response.status_code}: {response.text}",
+                        "table": self.table_name,
+                        "rows_written": total_rows
+                    }
+                
+                total_rows += len(chunk)
+            
+            return {
+                "status": "success",
+                "table": self.table_name,
+                "rows_written": total_rows,
+                "mode": self.mode
+            }
+            
+        except Exception as e:
+            return {
+                "status": "error",
+                "error": str(e),
+                "table": self.table_name
+            }
+    
+    def test_connection(self) -> bool:
+        """Тестирование подключения"""
+        try:
+            response = requests.get(f"{self._get_base_url()}/", params={'query': 'SELECT 1'})
+            return response.status_code == 200
+        except Exception as e:
+            logger.error(f"Ошибка подключения к ClickHouse: {e}")
+            return False
+    
+    def get_tables(self) -> List[str]:
+        """Получение списка таблиц"""
+        try:
+            query = "SHOW TABLES"
+            response = requests.get(f"{self._get_base_url()}/", params={'query': query})
+            
+            if response.status_code == 200:
+                lines = response.text.strip().split('\n')
+                return [line.strip() for line in lines if line.strip()]
+            return []
+        except Exception as e:
+            logger.error(f"Ошибка получения списка таблиц: {e}")
+            return []
+    
+    def create_table(self, table_name: str, schema: List[dict]) -> bool:
+        """Создание таблицы по схеме"""
+        try:
+            # Строим SQL для создания таблицы
+            columns_sql = []
+            for col in schema:
+                col_name = col["column_name"]
+                col_type = col["data_type"]
+                nullable = col.get("nullable", True)
+                
+                # Определяем тип ClickHouse
+                ch_type = self._get_clickhouse_type(col_type)
+                
+                # Добавляем NULL/NOT NULL
+                null_constraint = "" if nullable else " NOT NULL"
+                
+                columns_sql.append(f"`{col_name}` {ch_type}{null_constraint}")
+            
+            # Создаем SQL запрос
+            create_sql = f"""
+            CREATE TABLE IF NOT EXISTS `{table_name}` (
+                {', '.join(columns_sql)}
+            ) ENGINE = MergeTree()
+            ORDER BY tuple()
+            """
+            
+            response = requests.post(f"{self._get_base_url()}/", data=create_sql)
+            
+            return response.status_code == 200
+            
+        except Exception as e:
+            logger.error(f"Ошибка создания таблицы {table_name}: {e}")
+            return False
+    
+    def _get_clickhouse_type(self, data_type: str) -> str:
+        """Преобразует тип данных в тип ClickHouse"""
+        data_type_lower = data_type.lower()
+        
+        if "varchar" in data_type_lower or "character" in data_type_lower:
+            return "String"
+        elif "text" in data_type_lower:
+            return "String"
+        elif "integer" in data_type_lower or "int" in data_type_lower:
+            return "Int32"
+        elif "bigint" in data_type_lower:
+            return "Int64"
+        elif "float" in data_type_lower:
+            return "Float32"
+        elif "double" in data_type_lower:
+            return "Float64"
+        elif "boolean" in data_type_lower or "bool" in data_type_lower:
+            return "UInt8"
+        elif "date" in data_type_lower:
+            return "Date"
+        elif "timestamp" in data_type_lower or "datetime" in data_type_lower:
+            return "DateTime"
+        else:
+            return "String"  # По умолчанию
