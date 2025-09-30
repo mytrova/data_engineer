@@ -284,6 +284,19 @@ export const AirflowDashboard: React.FC = () => {
         setDAGs(data.dags)
         setLastFetchTime(now)
         
+        // Очищаем localStorage от несуществующих DAG'ов
+        const existingDAGs = JSON.parse(localStorage.getItem('creating_dags') || '{}')
+        const existingDAGIds = new Set(data.dags.map((dag: DAG) => dag.dag_id))
+        
+        const cleanedDAGs: Record<string, any> = {}
+        Object.keys(existingDAGs).forEach(dagId => {
+          if (existingDAGIds.has(dagId)) {
+            cleanedDAGs[dagId] = existingDAGs[dagId]
+          }
+        })
+        
+        localStorage.setItem('creating_dags', JSON.stringify(cleanedDAGs))
+        
         // Загружаем запуски только для активных DAG'ов и только если они еще не загружены
         const runsPromises = data.dags
           .filter((dag: DAG) => !dagRuns[dag.dag_id]) // Только если runs еще не загружены
@@ -340,6 +353,19 @@ export const AirflowDashboard: React.FC = () => {
     
     return () => clearInterval(interval)
   }, [])
+
+  // Автоматически очищаем несуществующие DAG'и при загрузке
+  useEffect(() => {
+    if (dags.length > 0 && Object.keys(creatingDAGs).length > 0) {
+      const existingDAGIds = new Set(dags.map((dag: DAG) => dag.dag_id))
+      const hasNonExistentDAGs = Object.keys(creatingDAGs).some(dagId => !existingDAGIds.has(dagId))
+      
+      if (hasNonExistentDAGs) {
+        console.log('Обнаружены несуществующие DAG\'и в localStorage, очищаем...')
+        clearNonExistentDAGs()
+      }
+    }
+  }, [dags, creatingDAGs])
 
   // Очищаем localStorage когда DAG появляется в обычном списке
   useEffect(() => {
@@ -417,6 +443,24 @@ export const AirflowDashboard: React.FC = () => {
     } catch (err) {
       setError(`Ошибка при удалении DAG ${dagId}`)
     }
+  }
+
+  const clearNonExistentDAGs = () => {
+    // Очищаем localStorage от всех несуществующих DAG'ов
+    const existingDAGs = JSON.parse(localStorage.getItem('creating_dags') || '{}')
+    const existingDAGIds = new Set(dags.map((dag: DAG) => dag.dag_id))
+    
+    const cleanedDAGs: Record<string, any> = {}
+    Object.keys(existingDAGs).forEach(dagId => {
+      if (existingDAGIds.has(dagId)) {
+        cleanedDAGs[dagId] = existingDAGs[dagId]
+      }
+    })
+    
+    localStorage.setItem('creating_dags', JSON.stringify(cleanedDAGs))
+    
+    // Обновляем список DAG'ов
+    fetchDAGs(true)
   }
 
   const getStatusIcon = (status: string) => {

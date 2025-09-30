@@ -60,18 +60,42 @@ export const DataTransferForm: React.FC = () => {
     chunkSize,
     sourceDelimiter,
     sinkDelimiter,
+    // PostgreSQL источник
     sourceDbHost,
     sourceDbPort,
     sourceDbDatabase,
     sourceDbUsername,
     sourceDbPassword,
     sourceDbTableName,
+    // ClickHouse источник
+    sourceChHost,
+    sourceChPort,
+    sourceChDatabase,
+    sourceChUsername,
+    sourceChPassword,
+    sourceChTableName,
+    // Kafka источник
+    sourceKafkaBootstrapServers,
+    sourceKafkaTopic,
+    sourceKafkaGroupId,
+    // PostgreSQL приёмник
     sinkDbHost,
     sinkDbPort,
     sinkDbDatabase,
     sinkDbUsername,
     sinkDbPassword,
     sinkDbTableName,
+    // ClickHouse приёмник
+    sinkChHost,
+    sinkChPort,
+    sinkChDatabase,
+    sinkChUsername,
+    sinkChPassword,
+    sinkChTableName,
+    // Kafka приёмник
+    sinkKafkaBootstrapServers,
+    sinkKafkaTopic,
+    sinkKafkaKeyField,
     useAirflow,
     isLoading,
     error,
@@ -83,18 +107,42 @@ export const DataTransferForm: React.FC = () => {
     setChunkSize,
     setSourceDelimiter,
     setSinkDelimiter,
+    // PostgreSQL источник
     setSourceDbHost,
     setSourceDbPort,
     setSourceDbDatabase,
     setSourceDbUsername,
     setSourceDbPassword,
     setSourceDbTableName,
+    // ClickHouse источник
+    setSourceChHost,
+    setSourceChPort,
+    setSourceChDatabase,
+    setSourceChUsername,
+    setSourceChPassword,
+    setSourceChTableName,
+    // Kafka источник
+    setSourceKafkaBootstrapServers,
+    setSourceKafkaTopic,
+    setSourceKafkaGroupId,
+    // PostgreSQL приёмник
     setSinkDbHost,
     setSinkDbPort,
     setSinkDbDatabase,
     setSinkDbUsername,
     setSinkDbPassword,
     setSinkDbTableName,
+    // ClickHouse приёмник
+    setSinkChHost,
+    setSinkChPort,
+    setSinkChDatabase,
+    setSinkChUsername,
+    setSinkChPassword,
+    setSinkChTableName,
+    // Kafka приёмник
+    setSinkKafkaBootstrapServers,
+    setSinkKafkaTopic,
+    setSinkKafkaKeyField,
     setUseAirflow,
     handleTransfer,
     reset
@@ -117,6 +165,15 @@ export const DataTransferForm: React.FC = () => {
               dbUsername={sourceDbUsername}
               dbPassword={sourceDbPassword}
               dbTableName={sourceDbTableName}
+              chHost={sourceChHost}
+              chPort={sourceChPort}
+              chDatabase={sourceChDatabase}
+              chUsername={sourceChUsername}
+              chPassword={sourceChPassword}
+              chTableName={sourceChTableName}
+              kafkaBootstrapServers={sourceKafkaBootstrapServers}
+              kafkaTopic={sourceKafkaTopic}
+              kafkaGroupId={sourceKafkaGroupId}
               onSourceTypeChange={setSourceType}
               onDelimiterChange={setSourceDelimiter}
               onFileSelect={setFile}
@@ -127,6 +184,15 @@ export const DataTransferForm: React.FC = () => {
               onDbUsernameChange={setSourceDbUsername}
               onDbPasswordChange={setSourceDbPassword}
               onDbTableNameChange={setSourceDbTableName}
+              onChHostChange={setSourceChHost}
+              onChPortChange={setSourceChPort}
+              onChDatabaseChange={setSourceChDatabase}
+              onChUsernameChange={setSourceChUsername}
+              onChPasswordChange={setSourceChPassword}
+              onChTableNameChange={setSourceChTableName}
+              onKafkaBootstrapServersChange={setSourceKafkaBootstrapServers}
+              onKafkaTopicChange={setSourceKafkaTopic}
+              onKafkaGroupIdChange={setSourceKafkaGroupId}
               disabled={isLoading}
             />
         
@@ -140,6 +206,15 @@ export const DataTransferForm: React.FC = () => {
           dbUsername={sinkDbUsername}
           dbPassword={sinkDbPassword}
           dbTableName={sinkDbTableName}
+          chHost={sinkChHost}
+          chPort={sinkChPort}
+          chDatabase={sinkChDatabase}
+          chUsername={sinkChUsername}
+          chPassword={sinkChPassword}
+          chTableName={sinkChTableName}
+          kafkaBootstrapServers={sinkKafkaBootstrapServers}
+          kafkaTopic={sinkKafkaTopic}
+          kafkaKeyField={sinkKafkaKeyField}
           useAirflow={useAirflow}
           sourceType={sourceType}
           onSinkTypeChange={setSinkType}
@@ -151,6 +226,15 @@ export const DataTransferForm: React.FC = () => {
           onDbUsernameChange={setSinkDbUsername}
           onDbPasswordChange={setSinkDbPassword}
           onDbTableNameChange={setSinkDbTableName}
+          onChHostChange={setSinkChHost}
+          onChPortChange={setSinkChPort}
+          onChDatabaseChange={setSinkChDatabase}
+          onChUsernameChange={setSinkChUsername}
+          onChPasswordChange={setSinkChPassword}
+          onChTableNameChange={setSinkChTableName}
+          onKafkaBootstrapServersChange={setSinkKafkaBootstrapServers}
+          onKafkaTopicChange={setSinkKafkaTopic}
+          onKafkaKeyFieldChange={setSinkKafkaKeyField}
           onUseAirflowChange={setUseAirflow}
           disabled={isLoading}
         />

@@ -9,11 +9,25 @@ RUN apt-get update \
     && apt-get clean \
     && rm -rf /var/lib/apt/lists/*
 
+
 # Переключение обратно на пользователя airflow
 USER airflow
 
 # Копирование DAG файлов
 COPY airflow/dags/ /opt/airflow/dags/
+
+# Создание структуры директорий
+RUN mkdir -p /opt/airflow/backend/app/services
+
+# Копирование модулей backend
+COPY backend/app/services/schema_mapper.py /opt/airflow/backend/app/services/schema_mapper.py
+COPY airflow/backend/__init__.py /opt/airflow/backend/__init__.py
+COPY airflow/backend/app/__init__.py /opt/airflow/backend/app/__init__.py
+COPY airflow/backend/app/services/__init__.py /opt/airflow/backend/app/services/__init__.py
+
+# Копирование и установка зависимостей
+COPY airflow/requirements.txt /requirements.txt
+RUN pip install --no-cache-dir -r /requirements.txt
 
 # Установка переменных окружения
 ENV AIRFLOW__CORE__DAGS_FOLDER=/opt/airflow/dags

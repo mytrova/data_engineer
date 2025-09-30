@@ -1,0 +1,17 @@
+input:
+  sql_select:
+    driver: postgres
+    dsn: postgresql://api_user:secure_password@158.160.5.104:5432/api_db?sslmode=disable
+    table: from_json_big
+    columns:
+    - '*'
+    where: 1=1
+pipeline:
+  processors:
+  - mapping: root = this
+output:
+  http_client:
+    url: http://myuser:mypassword@158.160.5.104:8123/?query=CREATE%20TABLE%20IF%20NOT%20EXISTS%20testdb.from_postgresql%20%28id%20UInt32%2C%20data%20String%29%20ENGINE%20%3D%20MergeTree%28%29%20ORDER%20BY%20id%3B%20INSERT%20INTO%20testdb.from_postgresql%20FORMAT%20JSONEachRow
+    verb: POST
+    headers:
+      Content-Type: application/json

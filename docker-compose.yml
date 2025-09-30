@@ -12,6 +12,7 @@ services:
       - postgres
     volumes:
       - ./airflow/dags:/app/airflow/dags
+      - ./benthos:/app/benthos
       - /var/run/docker.sock:/var/run/docker.sock
     restart: unless-stopped
     deploy:
@@ -46,7 +47,15 @@ services:
     ports:
       - "5432:5432"
     restart: unless-stopped
-
+  redpanda-connect:
+    image: docker.redpanda.com/redpandadata/connect
+    container_name: redpanda_connect
+    volumes:
+      - ./benthos.yaml:/config.yaml
+      - ./data:/data
+    ports:
+      - "4195:4195"
+    command: run /config.yaml
   airflow:
     build:
       context: /Users/marina/data
@@ -66,10 +75,12 @@ services:
       - AIRFLOW__WEBSERVER__EXPOSE_CONFIG=True
       - AIRFLOW__WEBSERVER__SECRET_KEY=your-secret-key-here
       - AIRFLOW__API__AUTH_BACKENDS=
-      - AIRFLOW__API__AUTHENTICATION_BACKENDS=
+      - PROJECT_ROOT=/Users/marina/data
     volumes:
-      - airflow_logs:/opt/airflow/logs
       - ./airflow/dags:/opt/airflow/dags
+      - ./benthos:/app/benthos
+      - /var/run/docker.sock:/var/run/docker.sock
+    privileged: true 
     restart: unless-stopped
 
 volumes:

@@ -2,6 +2,8 @@ import React from 'react'
 import styled from 'styled-components'
 import { Download, Settings } from 'lucide-react'
 import { DatabaseConnectionForm } from './DatabaseConnectionForm'
+import { ClickHouseConnectionForm } from './ClickHouseConnectionForm'
+import { KafkaConnectionForm } from './KafkaConnectionForm'
 
 const SinkContainer = styled.div`
   background: #f7fafc;
@@ -134,6 +136,17 @@ interface SinkSelectorProps {
   dbUsername: string
   dbPassword: string
   dbTableName: string
+  // ClickHouse
+  chHost: string
+  chPort: string
+  chDatabase: string
+  chUsername: string
+  chPassword: string
+  chTableName: string
+  // Kafka
+  kafkaBootstrapServers: string
+  kafkaTopic: string
+  kafkaKeyField: string
   useAirflow: boolean
   sourceType?: string  // Добавляем тип источника
   onSinkTypeChange: (type: string) => void
@@ -145,6 +158,17 @@ interface SinkSelectorProps {
   onDbUsernameChange: (username: string) => void
   onDbPasswordChange: (password: string) => void
   onDbTableNameChange: (tableName: string) => void
+  // ClickHouse
+  onChHostChange: (host: string) => void
+  onChPortChange: (port: string) => void
+  onChDatabaseChange: (database: string) => void
+  onChUsernameChange: (username: string) => void
+  onChPasswordChange: (password: string) => void
+  onChTableNameChange: (tableName: string) => void
+  // Kafka
+  onKafkaBootstrapServersChange: (servers: string) => void
+  onKafkaTopicChange: (topic: string) => void
+  onKafkaKeyFieldChange: (keyField: string) => void
   onUseAirflowChange: (use: boolean) => void
   disabled?: boolean
 }
@@ -159,6 +183,15 @@ export const SinkSelector: React.FC<SinkSelectorProps> = ({
   dbUsername,
   dbPassword,
   dbTableName,
+  chHost,
+  chPort,
+  chDatabase,
+  chUsername,
+  chPassword,
+  chTableName,
+  kafkaBootstrapServers,
+  kafkaTopic,
+  kafkaKeyField,
   useAirflow,
   sourceType,
   onSinkTypeChange,
@@ -170,14 +203,24 @@ export const SinkSelector: React.FC<SinkSelectorProps> = ({
   onDbUsernameChange,
   onDbPasswordChange,
   onDbTableNameChange,
+  onChHostChange,
+  onChPortChange,
+  onChDatabaseChange,
+  onChUsernameChange,
+  onChPasswordChange,
+  onChTableNameChange,
+  onKafkaBootstrapServersChange,
+  onKafkaTopicChange,
+  onKafkaKeyFieldChange,
   onUseAirflowChange,
   disabled = false
 }) => {
   const needsDelimiter = sinkType.toLowerCase() === 'csv'
   const isPreview = sinkType.toLowerCase() === 'preview'
   
-  // Показываем галочку Airflow только если источник - база данных
-  const showAirflowOption = sourceType === 'database' && sinkType === 'database'
+  // Показываем галочку Airflow только если источник и приёмник - базы данных
+  const showAirflowOption = ['postgresql', 'clickhouse', 'kafka'].includes(sourceType || '') && 
+                           ['postgresql', 'clickhouse', 'kafka'].includes(sinkType)
 
   return (
     <SinkContainer>
@@ -197,7 +240,9 @@ export const SinkSelector: React.FC<SinkSelectorProps> = ({
         <option value="csv">CSV файл</option>
         <option value="json">JSON файл</option>
         <option value="xml">XML файл</option>
-        <option value="database">База данных</option>
+        <option value="postgresql">PostgreSQL</option>
+        <option value="clickhouse">ClickHouse</option>
+        <option value="kafka">Kafka</option>
       </Select>
 
       {needsDelimiter && (
@@ -242,7 +287,7 @@ export const SinkSelector: React.FC<SinkSelectorProps> = ({
         </ProcessingSettings>
       )}
 
-      {sinkType === 'database' && (
+      {sinkType === 'postgresql' && (
         <>
           <DatabaseConnectionForm
             host={dbHost}
@@ -257,6 +302,70 @@ export const SinkSelector: React.FC<SinkSelectorProps> = ({
             onUsernameChange={onDbUsernameChange}
             onPasswordChange={onDbPasswordChange}
             onTableNameChange={onDbTableNameChange}
+            disabled={disabled}
+          />
+          
+          {showAirflowOption && (
+            <CheckboxContainer>
+              <Checkbox
+                type="checkbox"
+                id="use-airflow"
+                checked={useAirflow}
+                onChange={(e) => onUseAirflowChange(e.target.checked)}
+                disabled={disabled}
+              />
+              <CheckboxLabel htmlFor="use-airflow">
+                Использовать Airflow для оркестрации переливки данных
+              </CheckboxLabel>
+            </CheckboxContainer>
+          )}
+        </>
+      )}
+
+      {sinkType === 'clickhouse' && (
+        <>
+          <ClickHouseConnectionForm
+            host={chHost}
+            port={chPort}
+            database={chDatabase}
+            username={chUsername}
+            password={chPassword}
+            tableName={chTableName}
+            onHostChange={onChHostChange}
+            onPortChange={onChPortChange}
+            onDatabaseChange={onChDatabaseChange}
+            onUsernameChange={onChUsernameChange}
+            onPasswordChange={onChPasswordChange}
+            onTableNameChange={onChTableNameChange}
+            disabled={disabled}
+          />
+          
+          {showAirflowOption && (
+            <CheckboxContainer>
+              <Checkbox
+                type="checkbox"
+                id="use-airflow"
+                checked={useAirflow}
+                onChange={(e) => onUseAirflowChange(e.target.checked)}
+                disabled={disabled}
+              />
+              <CheckboxLabel htmlFor="use-airflow">
+                Использовать Airflow для оркестрации переливки данных
+              </CheckboxLabel>
+            </CheckboxContainer>
+          )}
+        </>
+      )}
+
+      {sinkType === 'kafka' && (
+        <>
+          <KafkaConnectionForm
+            bootstrapServers={kafkaBootstrapServers}
+            topic={kafkaTopic}
+            keyField={kafkaKeyField}
+            onBootstrapServersChange={onKafkaBootstrapServersChange}
+            onTopicChange={onKafkaTopicChange}
+            onKeyFieldChange={onKafkaKeyFieldChange}
             disabled={disabled}
           />
           
