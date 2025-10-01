@@ -1,6 +1,7 @@
 import React, { useState } from 'react'
 import styled from 'styled-components'
 import { Database, TestTube, Table, Eye } from 'lucide-react'
+import { getApiUrl } from '../utils/api'
 
 const DatabaseContainer = styled.div`
   background: #edf2f7;
@@ -197,7 +198,7 @@ export const DatabaseConnectionForm: React.FC<DatabaseConnectionFormProps> = ({
       formData.append('connection_string', connectionString)
       formData.append('database_type', 'postgresql')
 
-      const response = await fetch('http://localhost:8000/database/connect', {
+      const response = await fetch(getApiUrl('/database/connect'), {
         method: 'POST',
         body: formData,
       })
@@ -227,7 +228,7 @@ export const DatabaseConnectionForm: React.FC<DatabaseConnectionFormProps> = ({
       formData.append('table_name', tableName)
       formData.append('database_type', 'postgresql')
 
-      const response = await fetch('http://localhost:8000/database/schema', {
+      const response = await fetch(getApiUrl('/database/schema'), {
         method: 'POST',
         body: formData,
       })
