@@ -95,9 +95,33 @@ class SchemaMapper:
         """
     
     @staticmethod
+    def create_clickhouse_database(host: str, port: int, database: str, username: str, password: str) -> bool:
+        """Создает базу данных в ClickHouse"""
+        try:
+            create_db_sql = f"CREATE DATABASE IF NOT EXISTS `{database}`"
+            
+            url = f"http://{username}:{password}@{host}:{port}/"
+            response = requests.post(url, data=create_db_sql)
+            
+            if response.status_code == 200:
+                logger.info(f"База данных {database} успешно создана в ClickHouse")
+                return True
+            else:
+                logger.error(f"Ошибка создания базы данных в ClickHouse: {response.text}")
+                return False
+                
+        except Exception as e:
+            logger.error(f"Ошибка создания базы данных в ClickHouse: {e}")
+            return False
+
+    @staticmethod
     def create_clickhouse_table(host: str, port: int, database: str, username: str, password: str, table_name: str, schema: List[Dict[str, Any]]) -> bool:
         """Создает таблицу в ClickHouse"""
         try:
+            # Сначала создаем базу данных
+            if not SchemaMapper.create_clickhouse_database(host, port, database, username, password):
+                return False
+            
             sql = SchemaMapper.create_clickhouse_table_sql(schema, database, table_name)
             
             url = f"http://{username}:{password}@{host}:{port}/"

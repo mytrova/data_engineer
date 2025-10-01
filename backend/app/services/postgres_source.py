@@ -17,7 +17,7 @@ class PostgreSQLSource(DataSource):
         if self.connection.connect():
             self._connected = True
         else:
-            raise ConnectionError("Не удалось подключиться к PostgreSQL")
+            self._connected = False
     
     def headers(self) -> List[str]:
         """Возвращает заголовки столбцов"""
