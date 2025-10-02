@@ -46,6 +46,15 @@ docker compose up -d --build
 - Бэкенд: http://localhost:8000/health
 - **Airflow**: http://localhost:8081
 
+Прототип запущен по адресу http://158.160.24.225:3000/. Там же запущены ClickHouse и PostgreSQL. Если подробнее, то:
+CONTAINER ID   IMAGE                          COMMAND                  CREATED          STATUS          PORTS                                                                                                NAMES
+d6e5968f5250   postgres:15                    "docker-entrypoint.s…"   23 seconds ago   Up 15 seconds   0.0.0.0:5433->5432/tcp, [::]:5433->5432/tcp                                                          pg-api
+aa2b9d135dc9   clickhouse/clickhouse-server   "/entrypoint.sh"         2 minutes ago    Up 15 seconds   0.0.0.0:8123->8123/tcp, [::]:8123->8123/tcp, 0.0.0.0:9000->9000/tcp, [::]:9000->9000/tcp, 9009/tcp   my-clickhouse
+a316e42a7fa7   data_engineer-frontend         "/docker-entrypoint.…"   4 minutes ago    Up 4 minutes    80/tcp, 0.0.0.0:3000->3000/tcp, [::]:3000->3000/tcp                                                  data-orchestrator-frontend
+051165888f8d   data_engineer-airflow          "/usr/bin/dumb-init …"   4 minutes ago    Up 4 minutes    0.0.0.0:8081->8080/tcp, [::]:8081->8080/tcp                                                          data-orchestrator-airflow
+d6131f138680   data_engineer-backend          "uvicorn app.main:ap…"   4 minutes ago    Up 4 minutes    0.0.0.0:8000->8000/tcp, [::]:8000->8000/tcp                                                          data-orchestrator-backend
+ddbbf361940a   postgres:15                    "docker-entrypoint.s…"   4 minutes ago    Up 4 minutes    0.0.0.0:5432->5432/tcp, [::]:5432->5432/tcp                                                          data-orchestrator-postgres
+
 ## Использование
 ### Веб-интерфейс
 1. **Настройте источник данных**:
