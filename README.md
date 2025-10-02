@@ -42,9 +42,9 @@
 docker compose up -d --build
 ```
 
-- Фронтенд: http://localhost:3000
-- Бэкенд: http://localhost:8000/health
-- **Airflow**: http://localhost:8081
+- Фронтенд: http://158.160.24.225:3000
+- Бэкенд: http://158.160.24.225:8000/health
+- **Airflow**: http://158.160.24.225:8081
 
 Прототип запущен по адресу http://158.160.24.225:3000/. Там же запущены ClickHouse (порт 8123) и PostgreSQL (порт 5433)
 
@@ -79,7 +79,7 @@ docker compose up -d --build
 4. **Переход в веб-интерфейс**: прямая ссылка на Airflow UI
 
 **Учетные данные Airflow**:
-- **URL**: http://localhost:8081
+- **URL**: http://158.160.24.225:8081
 - **Логин**: `admin`
 - **Пароль**: `uSv9mh8FRTuEYz7z`
 
@@ -120,7 +120,7 @@ docker compose exec backend pytest -q
 - **Быстрая справка**: `AIRFLOW_QUICK_REFERENCE.md`
 
 ### Основные учетные данные
-- **Airflow веб-интерфейс**: http://localhost:8081 (admin / uSv9mh8FRTuEYz7z)
+- **Airflow веб-интерфейс**: http://158.160.24.225:8081 (admin / uSv9mh8FRTuEYz7z)
 - **API пользователь**: api_user / api123
 
 ## Примечания
