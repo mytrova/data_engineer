@@ -234,32 +234,71 @@ export const useDataTransfer = () => {
 
       try {
         // Проверяем, что приёмник - база данных (обязательно для больших файлов)
-        if (sinkType !== 'database') {
+        if (!['postgresql', 'clickhouse', 'kafka'].includes(sinkType)) {
           setError('Для больших файлов приёмник должен быть базой данных')
           setIsLoading(false)
           return
         }
 
-        // Проверяем параметры подключения к БД
-        if (!sinkDbHost || !sinkDbPort || !sinkDbDatabase || !sinkDbUsername || !sinkDbPassword || !sinkDbTableName) {
-          setError('Пожалуйста, заполните все поля подключения к базе данных для приёмника')
-          setIsLoading(false)
-          return
+        // Проверяем параметры подключения к БД в зависимости от типа приёмника
+        if (sinkType === 'postgresql') {
+          if (!sinkDbHost || !sinkDbPort || !sinkDbDatabase || !sinkDbUsername || !sinkDbPassword || !sinkDbTableName) {
+            setError('Пожалуйста, заполните все поля подключения к PostgreSQL для приёмника')
+            setIsLoading(false)
+            return
+          }
+        } else if (sinkType === 'clickhouse') {
+          if (!sinkChHost || !sinkChPort || !sinkChDatabase || !sinkChUsername || !sinkChPassword || !sinkChTableName) {
+            setError('Пожалуйста, заполните все поля подключения к ClickHouse для приёмника')
+            setIsLoading(false)
+            return
+          }
+        } else if (sinkType === 'kafka') {
+          if (!sinkKafkaBootstrapServers || !sinkKafkaTopic) {
+            setError('Пожалуйста, заполните все поля подключения к Kafka для приёмника')
+            setIsLoading(false)
+            return
+          }
         }
 
         const formData = new FormData()
         formData.append('file', file)
         
         // Конфигурация приёмника для прямой переливки
-        const sinkConfig = {
-          type: 'database',
-          host: sinkDbHost,
-          port: parseInt(sinkDbPort || '5432'),
-          database: sinkDbDatabase,
-          username: sinkDbUsername,
-          password: sinkDbPassword,
-          table_name: sinkDbTableName,
-          db_type: 'postgresql'
+        let sinkConfig: any = {
+          type: 'database'
+        }
+        
+        if (sinkType === 'postgresql') {
+          sinkConfig = {
+            ...sinkConfig,
+            host: sinkDbHost,
+            port: parseInt(sinkDbPort || '5432'),
+            database: sinkDbDatabase,
+            username: sinkDbUsername,
+            password: sinkDbPassword,
+            table_name: sinkDbTableName,
+            db_type: 'postgresql'
+          }
+        } else if (sinkType === 'clickhouse') {
+          sinkConfig = {
+            ...sinkConfig,
+            host: sinkChHost,
+            port: parseInt(sinkChPort || '8123'),
+            database: sinkChDatabase,
+            username: sinkChUsername,
+            password: sinkChPassword,
+            table_name: sinkChTableName,
+            db_type: 'clickhouse'
+          }
+        } else if (sinkType === 'kafka') {
+          sinkConfig = {
+            ...sinkConfig,
+            bootstrap_servers: sinkKafkaBootstrapServers,
+            topic: sinkKafkaTopic,
+            key_field: sinkKafkaKeyField,
+            db_type: 'kafka'
+          }
         }
         
         formData.append('sink_config', JSON.stringify(sinkConfig))
@@ -631,20 +670,68 @@ export const useDataTransfer = () => {
       } else {
         // Обычный перенос в файлы
         console.log('DEBUG: Используем обычный перенос в файлы')
-        endpoint = sinkType === 'preview' ? '/upload' : '/transfer'
-        console.log('DEBUG: endpoint =', endpoint)
-        formData = new FormData()
         
-        if (file) {
-          formData.append('file', file)
+        // Проверяем, является ли источник базой данных
+        const isDatabaseSource = ['postgresql', 'clickhouse', 'kafka'].includes(sourceType)
+        
+        if (isDatabaseSource) {
+          // Для баз данных используем специальный эндпоинт
+          endpoint = '/transfer/to-database'
+          console.log('DEBUG: Используем эндпоинт для баз данных:', endpoint)
+          formData = new FormData()
+          
+          // Добавляем параметры источника (база данных)
+          formData.append('source_type', sourceType)
+          formData.append('chunk_size', chunkSize.toString())
+          formData.append('delimiter', sourceDelimiter)
+          
+          // Добавляем параметры подключения к источнику
+          if (sourceType === 'postgresql') {
+            if (!sourceDbHost || !sourceDbPort || !sourceDbDatabase || !sourceDbUsername || !sourceDbPassword || !sourceDbTableName) {
+              throw new Error('Пожалуйста, заполните все поля подключения к PostgreSQL для источника')
+            }
+            formData.append('source_connection_string', `postgresql://${sourceDbUsername}:${sourceDbPassword}@${sourceDbHost}:${sourceDbPort}/${sourceDbDatabase}`)
+            formData.append('source_table_name', sourceDbTableName)
+          } else if (sourceType === 'clickhouse') {
+            if (!sourceChHost || !sourceChPort || !sourceChDatabase || !sourceChUsername || !sourceChPassword || !sourceChTableName) {
+              throw new Error('Пожалуйста, заполните все поля подключения к ClickHouse для источника')
+            }
+            formData.append('source_host', sourceChHost)
+            formData.append('source_port', sourceChPort)
+            formData.append('source_database', sourceChDatabase)
+            formData.append('source_username', sourceChUsername)
+            formData.append('source_password', sourceChPassword)
+            formData.append('source_table_name', sourceChTableName)
+          } else if (sourceType === 'kafka') {
+            if (!sourceKafkaBootstrapServers || !sourceKafkaTopic) {
+              throw new Error('Пожалуйста, заполните все поля подключения к Kafka для источника')
+            }
+            formData.append('source_bootstrap_servers', sourceKafkaBootstrapServers)
+            formData.append('source_topic', sourceKafkaTopic)
+            formData.append('source_group_id', sourceKafkaGroupId)
+          }
+          
+          // Для предпросмотра устанавливаем режим preview
+          if (sinkType === 'preview') {
+            formData.append('sink_mode', 'preview')
+          }
+        } else {
+          // Для файловых источников используем обычную логику
+          endpoint = sinkType === 'preview' ? '/upload' : '/transfer'
+          console.log('DEBUG: endpoint =', endpoint)
+          formData = new FormData()
+          
+          if (file) {
+            formData.append('file', file)
+          }
+          formData.append('source_type', sourceType)
+          formData.append('sink_type', sinkType)
+          formData.append('chunk_size', chunkSize.toString())
+          
+          // Используем соответствующий разделитель в зависимости от типа операции
+          const delimiter = sinkType === 'preview' ? sourceDelimiter : sinkDelimiter
+          formData.append('delimiter', delimiter)
         }
-        formData.append('source_type', sourceType)
-        formData.append('sink_type', sinkType)
-        formData.append('chunk_size', chunkSize.toString())
-        
-        // Используем соответствующий разделитель в зависимости от типа операции
-        const delimiter = sinkType === 'preview' ? sourceDelimiter : sinkDelimiter
-        formData.append('delimiter', delimiter)
       }
 
       const response = await fetch(`${getApiBase()}${endpoint}`, {
@@ -658,7 +745,7 @@ export const useDataTransfer = () => {
         throw new Error(typeof errorMessage === 'string' ? errorMessage : JSON.stringify(errorMessage))
       }
 
-      if (sinkType === 'preview' || sinkType === 'database') {
+      if (sinkType === 'preview' || ['postgresql', 'clickhouse', 'kafka'].includes(sinkType)) {
         const data = await response.json()
         
         // Проверяем, является ли файл большим

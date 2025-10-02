@@ -55,7 +55,13 @@ class ClickHouseSink(DataSink):
                         if value == '':
                             escaped_row.append("''")
                         else:
-                            escaped_value = str(value).replace("'", "''").replace("\\", "\\\\")
+                            # Экранируем специальные символы для ClickHouse
+                            escaped_value = (str(value)
+                                          .replace("\\", "\\\\")  # Обратные слеши должны быть первыми
+                                          .replace("'", "''")     # Одинарные кавычки
+                                          .replace("\n", "\\n")   # Переносы строк
+                                          .replace("\r", "\\r")   # Возврат каретки
+                                          .replace("\t", "\\t"))  # Табуляция
                             escaped_row.append(f"'{escaped_value}'")
                     else:
                         escaped_row.append(str(value))
@@ -70,10 +76,14 @@ class ClickHouseSink(DataSink):
             auth = (self.username, self.password)
             params = {'database': self.database}
             
+            # Устанавливаем правильную кодировку для русских символов
+            headers = {'Content-Type': 'text/plain; charset=utf-8'}
+            
             response = requests.post(f"{self._get_base_url()}/", 
-                                  data=insert_query, 
+                                  data=insert_query.encode('utf-8'), 
                                   auth=auth, 
-                                  params=params)
+                                  params=params,
+                                  headers=headers)
             
             if response.status_code == 200:
                 return {
@@ -100,10 +110,36 @@ class ClickHouseSink(DataSink):
         """Запись данных чанками"""
         try:
             total_rows = 0
+            schema_analyzed = False
             
             for chunk in chunks:
                 if not chunk:  # Пропускаем пустые чанки
                     continue
+                
+                # Проверяем существование таблицы и создаем её при необходимости
+                if not schema_analyzed:
+                    if not self._table_exists(self.table_name):
+                        logger.info(f"Таблица {self.table_name} не существует, анализируем схему и создаем таблицу")
+                        
+                        # Анализируем схему из первого чанка
+                        from .type_analyzer import TypeAnalyzer
+                        schema = TypeAnalyzer.analyze_dataframe_schema(chunk, headers)
+                        
+                        # Создаем таблицу
+                        if self.create_table(self.table_name, schema):
+                            logger.info(f"Таблица {self.table_name} успешно создана")
+                        else:
+                            logger.error(f"Не удалось создать таблицу {self.table_name}")
+                            return {
+                                "status": "error",
+                                "error": f"Не удалось создать таблицу {self.table_name}",
+                                "table": self.table_name,
+                                "rows_written": total_rows
+                            }
+                    else:
+                        logger.info(f"Таблица {self.table_name} уже существует")
+                    
+                    schema_analyzed = True
                 
                 # Подготавливаем данные для вставки
                 values = []
@@ -117,7 +153,13 @@ class ClickHouseSink(DataSink):
                             if value == '':
                                 escaped_row.append("''")
                             else:
-                                escaped_value = str(value).replace("'", "''").replace("\\", "\\\\")
+                                # Экранируем специальные символы для ClickHouse
+                                escaped_value = (str(value)
+                                              .replace("\\", "\\\\")  # Обратные слеши должны быть первыми
+                                              .replace("'", "''")     # Одинарные кавычки
+                                              .replace("\n", "\\n")   # Переносы строк
+                                              .replace("\r", "\\r")   # Возврат каретки
+                                              .replace("\t", "\\t"))  # Табуляция
                                 escaped_row.append(f"'{escaped_value}'")
                         else:
                             escaped_row.append(str(value))
@@ -132,10 +174,14 @@ class ClickHouseSink(DataSink):
                 auth = (self.username, self.password)
                 params = {'database': self.database}
                 
+                # Устанавливаем правильную кодировку для русских символов
+                headers = {'Content-Type': 'text/plain; charset=utf-8'}
+                
                 response = requests.post(f"{self._get_base_url()}/", 
-                                      data=insert_query, 
+                                      data=insert_query.encode('utf-8'), 
                                       auth=auth, 
-                                      params=params)
+                                      params=params,
+                                      headers=headers)
                 
                 if response.status_code != 200:
                     return {
@@ -197,6 +243,33 @@ class ClickHouseSink(DataSink):
             logger.error(f"Ошибка получения списка таблиц: {e}")
             return []
     
+    def _table_exists(self, table_name: str) -> bool:
+        """Проверяет существование таблицы в ClickHouse"""
+        try:
+            # Используем SHOW TABLES для проверки существования таблицы
+            check_sql = f"SHOW TABLES FROM {self.database} LIKE '{table_name}'"
+            
+            auth = (self.username, self.password)
+            params = {'database': self.database}
+            headers = {'Content-Type': 'text/plain; charset=utf-8'}
+            
+            response = requests.post(f"{self._get_base_url()}/", 
+                                  data=check_sql.encode('utf-8'), 
+                                  auth=auth, 
+                                  params=params,
+                                  headers=headers)
+            
+            if response.status_code == 200:
+                # Если таблица существует, вернется её имя
+                return table_name in response.text
+            else:
+                logger.error(f"Ошибка проверки существования таблицы: {response.status_code} - {response.text}")
+                return False
+                
+        except Exception as e:
+            logger.error(f"Ошибка при проверке существования таблицы {table_name}: {e}")
+            return False
+
     def create_table(self, table_name: str, schema: List[dict]) -> bool:
         """Создание таблицы по схеме"""
         try:
@@ -228,10 +301,14 @@ class ClickHouseSink(DataSink):
             auth = (self.username, self.password)
             params = {'database': self.database}
             
+            # Устанавливаем правильную кодировку для русских символов
+            headers = {'Content-Type': 'text/plain; charset=utf-8'}
+            
             response = requests.post(f"{self._get_base_url()}/", 
-                                  data=create_sql, 
+                                  data=create_sql.encode('utf-8'), 
                                   auth=auth, 
-                                  params=params)
+                                  params=params,
+                                  headers=headers)
             
             return response.status_code == 200
             
