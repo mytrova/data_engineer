@@ -39,7 +39,6 @@
 
 ## Запуск
 ```bash
-cd /Users/marina/data
 docker compose up -d --build
 ```
 
@@ -107,7 +106,6 @@ docker compose up -d --build
 ## Тесты
 Запуск тестов локально:
 ```bash
-cd /Users/marina/data
 docker compose exec backend pip install -r /app/requirements.txt
 docker compose exec backend pytest -q
 ```
