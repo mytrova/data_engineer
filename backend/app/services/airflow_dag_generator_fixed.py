@@ -208,7 +208,6 @@ def get_total_rows():
 
 def process_chunk(chunk_offset: int, chunk_size: int):
     """Обрабатывает один чанк данных"""
-    import pandas as pd
     import sqlite3
     import logging
     
@@ -217,6 +216,7 @@ def process_chunk(chunk_offset: int, chunk_size: int):
     try:
         # Подключаемся к SQLite
         sqlite_conn = sqlite3.connect(SQLITE_DB_PATH)
+        cursor = sqlite_conn.cursor()
         
         # Читаем чанк данных
         query = f"""
@@ -225,17 +225,27 @@ def process_chunk(chunk_offset: int, chunk_size: int):
         LIMIT {{chunk_size}} OFFSET {{chunk_offset}}
         """
         
-        df = pd.read_sql_query(query, sqlite_conn)
+        cursor.execute(query)
+        rows = cursor.fetchall()
+        
+        # Получаем названия колонок
+        cursor.execute(f"PRAGMA table_info({{SOURCE_TABLE}})")
+        columns_info = cursor.fetchall()
+        column_names = [col[1] for col in columns_info]
+        
+        # Преобразуем в список словарей
+        data = [dict(zip(column_names, row)) for row in rows]
+        
         sqlite_conn.close()
         
-        if df.empty:
+        if not data:
             logger.info(f"Чанк {{chunk_offset}} пуст, пропускаем")
             return
             
         # Подготавливаем данные для вставки
         # Убираем row_index из данных
-        if 'row_index' in df.columns:
-            df = df.drop('row_index', axis=1)
+        if data and 'row_index' in data[0]:
+            data = [{k: v for k, v in row.items() if k != 'row_index'} for row in data]
             
         # Подключаемся к целевой БД
         if SINK_CONFIG["db_type"] == 'postgresql':
@@ -255,15 +265,23 @@ def process_chunk(chunk_offset: int, chunk_size: int):
             raise ValueError(f"Неподдерживаемый тип БД: {{SINK_CONFIG["db_type"]}}")
         
         # Вставляем данные
-        df.to_sql(
-            SINK_CONFIG["table_name"],
-            engine,
-            if_exists='append',
-            index=False,
-            method='multi'
-        )
+        from sqlalchemy import text
         
-        logger.info(f"Успешно обработан чанк {{chunk_offset}}-{{chunk_offset + len(df)}} ({{len(df)}} строк)")
+        if data:
+            # Получаем заголовки из первого элемента
+            headers = list(data[0].keys())
+            
+            # Создаем SQL запрос для вставки
+            columns = ', '.join(headers)
+            placeholders = ', '.join([f':{header}' for header in headers])
+            insert_sql = f"INSERT INTO {SINK_CONFIG['table_name']} ({columns}) VALUES ({placeholders})"
+            
+            with engine.connect() as conn:
+                for row in data:
+                    conn.execute(text(insert_sql), row)
+                conn.commit()
+        
+        logger.info(f"Успешно обработан чанк {{chunk_offset}}-{{chunk_offset + len(data)}} ({{len(data)}} строк)")
         
     except Exception as e:
         logger.error(f"Ошибка при обработке чанка {{chunk_offset}}: {{str(e)}}")

@@ -221,6 +221,9 @@ export const SinkSelector: React.FC<SinkSelectorProps> = ({
   // Показываем галочку Airflow только если источник и приёмник - базы данных
   const showAirflowOption = ['postgresql', 'clickhouse', 'kafka'].includes(sourceType || '') && 
                            ['postgresql', 'clickhouse', 'kafka'].includes(sinkType)
+  
+  // Если источник - база данных, то Airflow обязателен
+  const isAirflowRequired = ['postgresql', 'clickhouse', 'kafka'].includes(sourceType || '')
 
   return (
     <SinkContainer>
@@ -312,10 +315,13 @@ export const SinkSelector: React.FC<SinkSelectorProps> = ({
                 id="use-airflow"
                 checked={useAirflow}
                 onChange={(e) => onUseAirflowChange(e.target.checked)}
-                disabled={disabled}
+                disabled={disabled || isAirflowRequired}
               />
               <CheckboxLabel htmlFor="use-airflow">
-                Использовать Airflow для оркестрации переливки данных
+                {isAirflowRequired 
+                  ? "Использовать Airflow для оркестрации переливки данных (обязательно для БД)"
+                  : "Использовать Airflow для оркестрации переливки данных"
+                }
               </CheckboxLabel>
             </CheckboxContainer>
           )}
@@ -347,10 +353,13 @@ export const SinkSelector: React.FC<SinkSelectorProps> = ({
                 id="use-airflow"
                 checked={useAirflow}
                 onChange={(e) => onUseAirflowChange(e.target.checked)}
-                disabled={disabled}
+                disabled={disabled || isAirflowRequired}
               />
               <CheckboxLabel htmlFor="use-airflow">
-                Использовать Airflow для оркестрации переливки данных
+                {isAirflowRequired 
+                  ? "Использовать Airflow для оркестрации переливки данных (обязательно для БД)"
+                  : "Использовать Airflow для оркестрации переливки данных"
+                }
               </CheckboxLabel>
             </CheckboxContainer>
           )}
@@ -376,10 +385,13 @@ export const SinkSelector: React.FC<SinkSelectorProps> = ({
                 id="use-airflow"
                 checked={useAirflow}
                 onChange={(e) => onUseAirflowChange(e.target.checked)}
-                disabled={disabled}
+                disabled={disabled || isAirflowRequired}
               />
               <CheckboxLabel htmlFor="use-airflow">
-                Использовать Airflow для оркестрации переливки данных
+                {isAirflowRequired 
+                  ? "Использовать Airflow для оркестрации переливки данных (обязательно для БД)"
+                  : "Использовать Airflow для оркестрации переливки данных"
+                }
               </CheckboxLabel>
             </CheckboxContainer>
           )}

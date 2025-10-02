@@ -25,17 +25,16 @@ class PostgreSQLSink(DataSink):
     def write(self, headers: Sequence[str], rows: Iterable[Sequence[Any]]) -> Any:
         """Запись данных в таблицу"""
         try:
-            import pandas as pd
             from sqlalchemy import create_engine, text
             
-            # Создаем DataFrame
-            df = pd.DataFrame(list(rows), columns=list(headers))
+            # Преобразуем данные в список словарей
+            data = [dict(zip(headers, row)) for row in rows]
             
             # Подключаемся к базе
             engine = create_engine(self.connection_string)
             
             # Анализируем типы данных
-            schema = TypeAnalyzer.analyze_dataframe_schema(df)
+            schema = TypeAnalyzer.analyze_dataframe_schema(data, list(headers))
             
             # Если режим replace, создаем таблицу с правильными типами
             if self.mode == "replace":
@@ -48,15 +47,15 @@ class PostgreSQLSink(DataSink):
                 self._create_table_with_schema(engine, schema)
                 
                 # Записываем данные
-                df.to_sql(self.table_name, engine, if_exists='append', index=False, method='multi')
+                self._insert_data(engine, data)
             else:
                 # Для append режима используем стандартный метод
-                df.to_sql(self.table_name, engine, if_exists='append', index=False)
+                self._insert_data(engine, data)
             
             return {
                 "status": "success",
                 "table": self.table_name,
-                "rows_written": len(df),
+                "rows_written": len(data),
                 "mode": self.mode,
                 "schema_analyzed": True
             }
@@ -71,7 +70,6 @@ class PostgreSQLSink(DataSink):
     def write_chunks(self, headers: Sequence[str], chunks: Iterable[List[Sequence[Any]]]) -> Any:
         """Запись данных чанками"""
         try:
-            import pandas as pd
             from sqlalchemy import create_engine, text
             
             engine = create_engine(self.connection_string)
@@ -82,12 +80,12 @@ class PostgreSQLSink(DataSink):
                 if not chunk:  # Пропускаем пустые чанки
                     continue
                 
-                # Создаем DataFrame для чанка
-                df = pd.DataFrame(chunk, columns=list(headers))
+                # Преобразуем чанк в список словарей
+                chunk_data = [dict(zip(headers, row)) for row in chunk]
                 
                 # Анализируем схему только для первого чанка
                 if not schema_analyzed and self.mode == "replace":
-                    schema = TypeAnalyzer.analyze_dataframe_schema(df)
+                    schema = TypeAnalyzer.analyze_dataframe_schema(chunk_data, list(headers))
                     
                     # Удаляем таблицу если существует
                     with engine.connect() as conn:
@@ -100,11 +98,11 @@ class PostgreSQLSink(DataSink):
                 
                 # Записываем чанк
                 if self.mode == "replace" and total_rows == 0 and not schema_analyzed:
-                    df.to_sql(self.table_name, engine, if_exists='replace', index=False)
+                    self._insert_data(engine, chunk_data)
                 else:
-                    df.to_sql(self.table_name, engine, if_exists='append', index=False, method='multi')
+                    self._insert_data(engine, chunk_data)
                 
-                total_rows += len(df)
+                total_rows += len(chunk_data)
             
             return {
                 "status": "success",
@@ -200,6 +198,26 @@ class PostgreSQLSink(DataSink):
         except Exception as e:
             print(f"Ошибка создания таблицы {table_name}: {e}")
             return False
+    
+    def _insert_data(self, engine, data):
+        """Вставляет данные в таблицу"""
+        from sqlalchemy import text
+        
+        if not data:
+            return
+        
+        # Получаем заголовки из первого элемента
+        headers = list(data[0].keys())
+        
+        # Создаем SQL запрос для вставки
+        columns = ', '.join(headers)
+        placeholders = ', '.join([f':{header}' for header in headers])
+        insert_sql = f"INSERT INTO {self.table_name} ({columns}) VALUES ({placeholders})"
+        
+        with engine.connect() as conn:
+            for row in data:
+                conn.execute(text(insert_sql), row)
+            conn.commit()
     
     def __del__(self):
         """Закрытие подключения при удалении объекта"""

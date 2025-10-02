@@ -1,9 +1,10 @@
-import React from 'react'
+import React, { useState } from 'react'
 import styled from 'styled-components'
 import { SourceSelector } from './SourceSelector'
 import { SinkSelector } from './SinkSelector'
 import { DataPreview } from './DataPreview'
 import { ProgressBar } from './ProgressBar'
+import DataAnalysisModal from './DataAnalysisModal'
 import { useDataTransfer } from '../hooks/useDataTransfer'
 
 const FormContainer = styled.div`
@@ -51,8 +52,203 @@ const ErrorContainer = styled.div`
   color: #c53030;
 `
 
+const CheckboxContainer = styled.div`
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  margin: 16px 0;
+  padding: 12px 16px;
+  background: #f8f9fa;
+  border-radius: 8px;
+  border: 1px solid #e1e5e9;
+`
+
+const Checkbox = styled.input`
+  width: 18px;
+  height: 18px;
+  cursor: pointer;
+  accent-color: #667eea;
+`
+
+const CheckboxLabel = styled.label`
+  font-size: 14px;
+  color: #333;
+  cursor: pointer;
+  user-select: none;
+  font-weight: 500;
+`
+
 
 export const DataTransferForm: React.FC = () => {
+  const [showAnalysisModal, setShowAnalysisModal] = useState(false)
+  const [analysisData, setAnalysisData] = useState<any>(null)
+  const [enableLLMAnalysis, setEnableLLMAnalysis] = useState(true)
+  
+  const handleTransferWithAnalysis = async () => {
+    if (enableLLMAnalysis) {
+      try {
+        // Собираем данные о схеме источника и приёмника
+        const sourceSchema = await getSourceSchema()
+        const sinkSchema = await getSinkSchema()
+        
+        setAnalysisData({
+          sourceSchema,
+          sinkSchema,
+          sourceType,
+          sinkType
+        })
+        setShowAnalysisModal(true)
+      } catch (error) {
+        console.error('Ошибка при получении схемы данных:', error)
+        // Если не удалось получить схему, запускаем перенос без анализа
+        handleTransfer()
+      }
+    } else {
+      // Если анализ отключен, запускаем перенос сразу без получения схемы
+      handleTransfer()
+    }
+  }
+  
+  const handleConfirmTransfer = () => {
+    setShowAnalysisModal(false)
+    handleTransfer()
+  }
+  
+  const getSourceSchema = async () => {
+    try {
+      if (sourceType === 'clickhouse') {
+        // Для ClickHouse источника
+        const response = await fetch('/api/database/connect', {
+          method: 'POST',
+          headers: {
+            'Content-Type': 'application/x-www-form-urlencoded',
+          },
+          body: new URLSearchParams({
+            database_type: 'clickhouse',
+            host: sourceChHost,
+            port: sourceChPort,
+            database: sourceChDatabase,
+            username: sourceChUsername,
+            password: sourceChPassword,
+          })
+        })
+        
+        const data = await response.json()
+        return {
+          type: sourceType,
+          host: sourceChHost,
+          database: sourceChDatabase,
+          table: sourceChTableName,
+          connected: data.connected,
+          tables: data.tables || []
+        }
+      } else if (sourceType === 'postgresql') {
+        // Для PostgreSQL источника
+        const connectionString = `postgresql://${sourceDbUsername}:${sourceDbPassword}@${sourceDbHost}:${sourceDbPort}/${sourceDbDatabase}`
+        const response = await fetch('/api/database/connect', {
+          method: 'POST',
+          headers: {
+            'Content-Type': 'application/x-www-form-urlencoded',
+          },
+          body: new URLSearchParams({
+            database_type: 'postgresql',
+            connection_string: connectionString,
+          })
+        })
+        
+        const data = await response.json()
+        return {
+          type: sourceType,
+          host: sourceDbHost,
+          database: sourceDbDatabase,
+          table: sourceDbTableName,
+          connected: data.connected,
+          tables: data.tables || []
+        }
+      } else {
+        // Для файловых источников
+        return {
+          type: sourceType,
+          filename: file?.name,
+          delimiter: sourceDelimiter
+        }
+      }
+    } catch (error) {
+      console.error('Ошибка при получении схемы источника:', error)
+      return {
+        type: sourceType,
+        error: 'Не удалось получить схему источника'
+      }
+    }
+  }
+  
+  const getSinkSchema = async () => {
+    try {
+      if (sinkType === 'clickhouse') {
+        // Для ClickHouse приёмника
+        const response = await fetch('/api/database/connect', {
+          method: 'POST',
+          headers: {
+            'Content-Type': 'application/x-www-form-urlencoded',
+          },
+          body: new URLSearchParams({
+            database_type: 'clickhouse',
+            host: sinkChHost,
+            port: sinkChPort,
+            database: sinkChDatabase,
+            username: sinkChUsername,
+            password: sinkChPassword,
+          })
+        })
+        
+        const data = await response.json()
+        return {
+          type: sinkType,
+          host: sinkChHost,
+          database: sinkChDatabase,
+          table: sinkChTableName,
+          connected: data.connected,
+          tables: data.tables || []
+        }
+      } else if (sinkType === 'postgresql') {
+        // Для PostgreSQL приёмника
+        const connectionString = `postgresql://${sinkDbUsername}:${sinkDbPassword}@${sinkDbHost}:${sinkDbPort}/${sinkDbDatabase}`
+        const response = await fetch('/api/database/connect', {
+          method: 'POST',
+          headers: {
+            'Content-Type': 'application/x-www-form-urlencoded',
+          },
+          body: new URLSearchParams({
+            database_type: 'postgresql',
+            connection_string: connectionString,
+          })
+        })
+        
+        const data = await response.json()
+        return {
+          type: sinkType,
+          host: sinkDbHost,
+          database: sinkDbDatabase,
+          table: sinkDbTableName,
+          connected: data.connected,
+          tables: data.tables || []
+        }
+      } else {
+        // Для файловых приёмников
+        return {
+          type: sinkType,
+          delimiter: sinkDelimiter
+        }
+      }
+    } catch (error) {
+      console.error('Ошибка при получении схемы приёмника:', error)
+      return {
+        type: sinkType,
+        error: 'Не удалось получить схему приёмника'
+      }
+    }
+  }
+  
   const {
     file,
     sourceType,
@@ -240,9 +436,21 @@ export const DataTransferForm: React.FC = () => {
         />
       </FormGrid>
 
+      <CheckboxContainer>
+        <Checkbox
+          type="checkbox"
+          id="llm-analysis"
+          checked={enableLLMAnalysis}
+          onChange={(e) => setEnableLLMAnalysis(e.target.checked)}
+        />
+        <CheckboxLabel htmlFor="llm-analysis">
+          🤖 Анализ данных LLM
+        </CheckboxLabel>
+      </CheckboxContainer>
+
       <div style={{ display: 'flex', justifyContent: 'center', marginTop: '2rem' }}>
         <button
-          onClick={handleTransfer}
+          onClick={handleTransferWithAnalysis}
           disabled={isLoading || (['csv', 'json', 'xml'].includes(sourceType) && !file)}
           style={{
             padding: '1rem 2rem',
@@ -270,7 +478,7 @@ export const DataTransferForm: React.FC = () => {
             }
           }}
         >
-          {isLoading ? 'Обработка...' : 'Запустить перенос'}
+          {isLoading ? 'Обработка...' : enableLLMAnalysis ? 'Запустить перенос с анализом' : 'Запустить перенос'}
         </button>
       </div>
 
@@ -287,6 +495,18 @@ export const DataTransferForm: React.FC = () => {
           data={result}
           sinkType={sinkType}
           onReset={reset}
+        />
+      )}
+      
+      {showAnalysisModal && analysisData && (
+        <DataAnalysisModal
+          isOpen={showAnalysisModal}
+          onClose={() => setShowAnalysisModal(false)}
+          onConfirm={handleConfirmTransfer}
+          sourceSchema={analysisData.sourceSchema}
+          sinkSchema={analysisData.sinkSchema}
+          sourceType={analysisData.sourceType}
+          sinkType={analysisData.sinkType}
         />
       )}
     </FormContainer>

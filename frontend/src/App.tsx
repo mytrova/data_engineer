@@ -3,6 +3,7 @@ import { DataTransferForm } from './components/DataTransferForm'
 import { Header } from './components/Header'
 import { AirflowDashboard } from './components/AirflowDashboard'
 import LargeFileManager from './components/LargeFileManager'
+import LLMChat from './components/LLMChat'
 import { GlobalStyles } from './styles/GlobalStyles'
 
 const AppContainer = styled.div`
@@ -37,6 +38,7 @@ function App() {
             <DataTransferForm />
           </ContentWrapper>
         </MainContent>
+        <LLMChat />
       </AppContainer>
     </>
   )

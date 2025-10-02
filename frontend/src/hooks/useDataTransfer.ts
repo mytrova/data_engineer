@@ -144,6 +144,14 @@ export const useDataTransfer = () => {
     if (savedData.sinkKafkaKeyField) setSinkKafkaKeyField(savedData.sinkKafkaKeyField)
   }, [])
 
+  // Автоматически включаем Airflow если источник - база данных
+  useEffect(() => {
+    const isDatabaseSource = ['postgresql', 'clickhouse', 'kafka'].includes(sourceType)
+    if (isDatabaseSource && !useAirflow) {
+      setUseAirflow(true)
+    }
+  }, [sourceType, useAirflow])
+
   // Сохраняем данные в localStorage при изменении
   useEffect(() => {
     const settings = {
@@ -564,6 +572,22 @@ export const useDataTransfer = () => {
             formData.append('sink_table_name', sinkDbTableName)
             formData.append('database_type', 'postgresql')
           } else if (sinkType === 'clickhouse') {
+            // Проверяем параметры ClickHouse
+            if (!sinkChHost || !sinkChPort || !sinkChDatabase || !sinkChUsername || !sinkChPassword || !sinkChTableName) {
+              setError('Пожалуйста, заполните все поля подключения к ClickHouse для приёмника')
+              setIsLoading(false)
+              return
+            }
+            
+            console.log('ClickHouse parameters:', {
+              host: sinkChHost,
+              port: sinkChPort,
+              database: sinkChDatabase,
+              username: sinkChUsername,
+              password: sinkChPassword,
+              table: sinkChTableName
+            })
+            
             formData.append('sink_host', sinkChHost)
             formData.append('sink_port', sinkChPort)
             formData.append('sink_database', sinkChDatabase)
