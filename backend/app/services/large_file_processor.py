@@ -15,6 +15,8 @@ from .csv_source import CSVSource
 from .json_source import JSONSource
 from .xml_source import XMLSource
 from .postgres_sink import PostgreSQLSink
+from .clickhouse_sink import ClickHouseSink
+from .kafka_sink import KafkaSink
 
 logger = logging.getLogger(__name__)
 
@@ -84,23 +86,33 @@ class LargeFileProcessor:
                 # Создаем sink для прямой записи в базу данных
                 sink = self._create_sink(sink_config)
                 
-                # Обрабатываем файл в зависимости от типа
+                # Обрабатываем файл в зависимости от типа и получаем результат
+                result = None
                 if file_type.lower() == "csv":
-                    self._process_csv_file_direct(process_id, file_path, sink, chunk_size)
+                    result = self._process_csv_file_direct(process_id, file_path, sink, chunk_size)
                 elif file_type.lower() == "json":
-                    self._process_json_file_direct(process_id, file_path, sink, chunk_size)
+                    result = self._process_json_file_direct(process_id, file_path, sink, chunk_size)
                 elif file_type.lower() == "xml":
-                    self._process_xml_file_direct(process_id, file_path, sink, chunk_size)
+                    result = self._process_xml_file_direct(process_id, file_path, sink, chunk_size)
                 else:
                     raise ValueError(f"Неподдерживаемый тип файла: {file_type}")
                 
-                # Завершаем обработку
-                logger.info(f"Обработка файла {process_id} завершена успешно")
-                
-                # Обновляем статус
-                self.processing_status[process_id]["status"] = "completed"
-                self.processing_status[process_id]["completed_at"] = datetime.now().isoformat()
-                self._save_status()
+                # Завершаем обработку только если нет ошибок
+                if result and result.get("status") == "success":
+                    logger.info(f"Обработка файла {process_id} завершена успешно")
+                    
+                    # Обновляем статус только при успехе
+                    self.processing_status[process_id]["status"] = "completed"
+                    self.processing_status[process_id]["completed_at"] = datetime.now().isoformat()
+                    self._save_status()
+                else:
+                    logger.error(f"Обработка файла {process_id} завершена с ошибкой")
+                    
+                    # Устанавливаем статус ошибки
+                    self.processing_status[process_id]["status"] = "error"
+                    self.processing_status[process_id]["error"] = result.get("error", "Неизвестная ошибка")
+                    self.processing_status[process_id]["completed_at"] = datetime.now().isoformat()
+                    self._save_status()
                 
             except Exception as e:
                 logger.error(f"Ошибка при обработке файла {process_id}: {e}")
@@ -116,14 +128,35 @@ class LargeFileProcessor:
     def _create_sink(self, sink_config: Dict[str, Any]):
         """Создание sink для записи данных"""
         if sink_config.get('type') == 'database':
-            # Формируем connection string
-            connection_string = f"postgresql://{sink_config['username']}:{sink_config['password']}@{sink_config['host']}:{sink_config['port']}/{sink_config['database']}"
+            db_type = sink_config.get('db_type', 'postgresql')
             
-            return PostgreSQLSink(
-                connection_string=connection_string,
-                table_name=sink_config['table_name'],
-                mode="append"
-            )
+            if db_type == 'postgresql':
+                # Формируем connection string
+                connection_string = f"postgresql://{sink_config['username']}:{sink_config['password']}@{sink_config['host']}:{sink_config['port']}/{sink_config['database']}"
+                
+                return PostgreSQLSink(
+                    connection_string=connection_string,
+                    table_name=sink_config['table_name'],
+                    mode="append"
+                )
+            elif db_type == 'clickhouse':
+                return ClickHouseSink(
+                    host=sink_config['host'],
+                    port=sink_config['port'],
+                    database=sink_config['database'],
+                    username=sink_config['username'],
+                    password=sink_config['password'],
+                    table_name=sink_config['table_name'],
+                    mode="append"
+                )
+            elif db_type == 'kafka':
+                return KafkaSink(
+                    bootstrap_servers=sink_config['bootstrap_servers'],
+                    topic=sink_config['topic'],
+                    key_field=sink_config.get('key_field')
+                )
+            else:
+                raise ValueError(f"Неподдерживаемый тип базы данных: {db_type}")
         else:
             raise ValueError(f"Неподдерживаемый тип sink: {sink_config.get('type')}")
     
@@ -160,15 +193,33 @@ class LargeFileProcessor:
             headers = next(csv_reader, [])
             
             logger.info(f"Заголовки: {headers}")
+            logger.info(f"Длина заголовков: {len(headers)}")
+            
+            # Проверяем, есть ли данные после заголовков
+            all_rows = list(csv_reader)
+            logger.info(f"Всего строк данных в файле: {len(all_rows)}")
+            
+            if len(all_rows) == 0:
+                logger.warning(f"Файл {process_id} содержит только заголовки, данных нет")
+                self.processing_status[process_id]["status"] = "completed"
+                self.processing_status[process_id]["error"] = "Файл содержит только заголовки, данных для загрузки нет"
+                return
             
             # Собираем все чанки для передачи в sink
             def chunk_generator():
                 chunk = []
                 nonlocal rows_processed
+                row_count = 0
                 
-                for row in csv_reader:
+                logger.info(f"Начинаем обработку {len(all_rows)} строк данных")
+                
+                for row in all_rows:
+                    row_count += 1
                     chunk.append(row)
+                    logger.info(f"Добавлена строка {row_count} в чанк: {row[:3] if len(row) > 3 else row}...")
+                    
                     if len(chunk) >= chunk_size:
+                        logger.info(f"Отдаем чанк размером {len(chunk)}")
                         yield chunk
                         rows_processed += len(chunk)
                         self.processing_status[process_id]["rows_processed"] = rows_processed
@@ -185,18 +236,48 @@ class LargeFileProcessor:
                 
                 # Обрабатываем оставшиеся строки
                 if chunk:
+                    logger.info(f"Отдаем последний чанк размером {len(chunk)}")
                     yield chunk
                     rows_processed += len(chunk)
                     self.processing_status[process_id]["rows_processed"] = rows_processed
+                    logger.info(f"Обработано строк в последнем чанке: {len(chunk)}")
+                
+                logger.info(f"Всего строк прочитано из файла: {row_count}")
             
             # Записываем все чанки в sink
-            sink.write_chunks(headers, chunk_generator())
+            logger.info("Вызываем sink.write_chunks()")
+            result = sink.write_chunks(headers, chunk_generator())
+            logger.info(f"Результат записи в sink: {result}")
             
-            logger.info(f"CSV файл {process_id} обработан полностью. Всего строк: {rows_processed}")
+            # Проверяем результат записи в sink
+            if result.get("status") == "error":
+                logger.error(f"Ошибка при записи в sink: {result.get('error')}")
+                return {
+                    "status": "error",
+                    "error": result.get("error"),
+                    "process_id": process_id
+                }
+            
+            # Обновляем финальный статус
+            final_rows = result.get('rows_written', rows_processed)
+            self.processing_status[process_id]["rows_processed"] = final_rows
+            logger.info(f"CSV файл {process_id} обработан полностью. Всего строк: {final_rows}")
+            
+            # Возвращаем результат обработки
+            return {
+                "status": "success",
+                "rows_processed": final_rows,
+                "process_id": process_id
+            }
             
         except Exception as e:
             logger.error(f"Ошибка при обработке CSV файла {process_id}: {e}")
-            raise
+            # Возвращаем результат с ошибкой
+            return {
+                "status": "error",
+                "error": str(e),
+                "process_id": process_id
+            }
     
     def _process_json_file_direct(self, process_id: str, file_path: str, sink, chunk_size: int):
         """Обработка JSON файла с прямой записью в sink"""

@@ -37,7 +37,7 @@ class BenthosConfigBuilder:
         
         # Формируем DSN для приёмника
         if sink_type == 'clickhouse':
-            sink_dsn = f"clickhouse://{sink_config.get('username', '')}:{sink_config.get('password', '')}@{sink_config.get('host', '')}:{sink_config.get('port', '')}/{sink_config.get('database', '')}"
+            sink_dsn = f"http://{sink_config.get('username', '')}:{sink_config.get('password', '')}@{sink_config.get('host', '')}:{sink_config.get('port', '')}/{sink_config.get('database', '')}"
         else:
             sink_dsn = f"{sink_type}://{sink_config.get('username', '')}:{sink_config.get('password', '')}@{sink_config.get('host', '')}:{sink_config.get('port', '')}/{sink_config.get('database', '')}"
         
@@ -54,33 +54,23 @@ class BenthosConfigBuilder:
         
         # Создаем конфигурацию выхода
         if sink_type == 'clickhouse':
-            # Для ClickHouse используем HTTP API
-            import urllib.parse
-            
-            # Только INSERT запрос (таблицу нужно создать отдельно)
-            insert_query = f"INSERT INTO {sink_config.get('database', '')}.{sink_config.get('table_name', '')} FORMAT JSONEachRow"
-            encoded_query = urllib.parse.quote(insert_query)
-            
-            # Формируем URL с аутентификацией
-            username = sink_config.get('username', 'default')
-            password = sink_config.get('password', '')
-            host = sink_config.get('host', '')
-            port = sink_config.get('port', '8123')
-            
-            if username and password:
-                url = f"http://{username}:{password}@{host}:{port}/?query={encoded_query}"
-            else:
-                url = f"http://{host}:{port}/?query={encoded_query}"
+            # Для ClickHouse используем sql_insert с правильным драйвером
+            import logging
+            logger = logging.getLogger(__name__)
+            logger.info(f"=== ИСПОЛЬЗУЕМ ИСПРАВЛЕННУЮ КОНФИГУРАЦИЮ ДЛЯ CLICKHOUSE ===")
+            logger.info(f"sink_type: {sink_type}")
+            logger.info(f"sink_dsn: {sink_dsn}")
             
             output_config = {
-                "http_client": {
-                    "url": url,
-                    "verb": "POST",
-                    "headers": {
-                        "Content-Type": "application/json"
-                    }
+                "sql_insert": {
+                    "driver": "clickhouse",
+                    "dsn": sink_dsn,
+                    "table": sink_config.get('table_name', ''),
+                    "columns": ["*"],
+                    "args_mapping": "root = this"
                 }
             }
+            logger.info(f"Созданная конфигурация выхода: {output_config}")
         else:
             # Для других баз данных используем sql_insert
             output_config = {
@@ -88,8 +78,7 @@ class BenthosConfigBuilder:
                     "driver": sink_driver,
                     "dsn": sink_dsn,
                     "table": sink_config.get('table_name', ''),
-                    "columns": ["*"],
-                    "args_mapping": "root = [this]"
+                    "args_mapping": "root = this"
                 }
             }
         
@@ -155,11 +144,11 @@ class BenthosConfigBuilder:
             },
             "output": {
                 "sql_insert": {
-                    "driver": db_type,
-                    "dsn": f"{db_type}://{sink_config.get('username', '')}:{sink_config.get('password', '')}@{sink_config.get('host', '')}:{sink_config.get('port', '')}/{sink_config.get('database', '')}",
+                    "driver": "clickhouse" if db_type == "clickhouse" else db_type,
+                    "dsn": f"http://{sink_config.get('username', '')}:{sink_config.get('password', '')}@{sink_config.get('host', '')}:{sink_config.get('port', '')}/{sink_config.get('database', '')}" if db_type == "clickhouse" else f"{db_type}://{sink_config.get('username', '')}:{sink_config.get('password', '')}@{sink_config.get('host', '')}:{sink_config.get('port', '')}/{sink_config.get('database', '')}",
                     "table": sink_config.get('table_name', ''),
-                    "columns": ["*"],
-                    "batch_size": chunk_size
+                    "columns": ["*"] if db_type == "clickhouse" else None,
+                    "args_mapping": "root = this" if db_type == "clickhouse" else None
                 }
             }
         }
@@ -178,8 +167,8 @@ class BenthosConfigBuilder:
         return {
             "input": {
                 "sql_select": {
-                    "driver": source_type,
-                    "dsn": f"{source_type}://{source_config.get('username', '')}:{source_config.get('password', '')}@{source_config.get('host', '')}:{source_config.get('port', '')}/{source_config.get('database', '')}",
+                    "driver": "clickhouse" if source_type == "clickhouse" else source_type,
+                    "dsn": f"http://{source_config.get('username', '')}:{source_config.get('password', '')}@{source_config.get('host', '')}:{source_config.get('port', '')}/{source_config.get('database', '')}" if source_type == "clickhouse" else f"{source_type}://{source_config.get('username', '')}:{source_config.get('password', '')}@{source_config.get('host', '')}:{source_config.get('port', '')}/{source_config.get('database', '')}",
                     "table": source_config.get('table_name', ''),
                     "columns": ["*"],
                     "where": "1=1",
@@ -257,11 +246,11 @@ class BenthosConfigBuilder:
             },
             "output": {
                 "sql_insert": {
-                    "driver": sink_type,
-                    "dsn": f"{sink_type}://{sink_config.get('username', '')}:{sink_config.get('password', '')}@{sink_config.get('host', '')}:{sink_config.get('port', '')}/{sink_config.get('database', '')}",
+                    "driver": "clickhouse" if sink_type == "clickhouse" else sink_type,
+                    "dsn": f"http://{sink_config.get('username', '')}:{sink_config.get('password', '')}@{sink_config.get('host', '')}:{sink_config.get('port', '')}/{sink_config.get('database', '')}" if sink_type == "clickhouse" else f"{sink_type}://{sink_config.get('username', '')}:{sink_config.get('password', '')}@{sink_config.get('host', '')}:{sink_config.get('port', '')}/{sink_config.get('database', '')}",
                     "table": sink_config.get('table_name', ''),
-                    "columns": ["*"],
-                    "batch_size": chunk_size
+                    "columns": ["*"] if sink_type == "clickhouse" else None,
+                    "args_mapping": "root = this" if sink_type == "clickhouse" else None
                 }
             }
         }

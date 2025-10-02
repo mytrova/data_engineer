@@ -52,11 +52,20 @@ logger = logging.getLogger(__name__)
 
 def create_clickhouse_table_from_postgresql(source_config, sink_config):
     """Создает таблицу в ClickHouse на основе схемы PostgreSQL"""
+    logger.info(f"=== НАЧАЛО СОЗДАНИЯ ТАБЛИЦЫ CLICKHOUSE ===")
+    logger.info("source_config: " + str(source_config))
+    logger.info("sink_config: " + str(sink_config))
     try:
         import sys
         import os
         sys.path.append('/opt/airflow')
-        from backend.app.services.schema_mapper import SchemaMapper
+        sys.path.append('/app')
+        try:
+            from backend.app.services.schema_mapper import SchemaMapper
+        except ImportError:
+            # Fallback путь
+            sys.path.append('/app/backend')
+            from app.services.schema_mapper import SchemaMapper
         
         # Получаем схему из PostgreSQL
         schema = SchemaMapper.get_postgresql_schema(
@@ -70,10 +79,11 @@ def create_clickhouse_table_from_postgresql(source_config, sink_config):
         
         if not schema:
             logger.error("Не удалось получить схему таблицы из PostgreSQL")
+            logger.info(f"=== РЕЗУЛЬТАТ СОЗДАНИЯ ТАБЛИЦЫ: False ===")
             return False
         
         # Создаем таблицу в ClickHouse
-        success = SchemaMapper.create_clickhouse_table(
+        table_creation_success = SchemaMapper.create_clickhouse_table(
             host=sink_config.get('host', ''),
             port=sink_config.get('port', 8123),
             database=sink_config.get('database', ''),
@@ -83,15 +93,18 @@ def create_clickhouse_table_from_postgresql(source_config, sink_config):
             schema=schema
         )
         
-        if success:
-            logger.info("Таблица в ClickHouse успешно создана")
+        if table_creation_success:
+            logger.info("=== ТАБЛИЦА В CLICKHOUSE УСПЕШНО СОЗДАНА ===")
+            logger.info("=== РЕЗУЛЬТАТ СОЗДАНИЯ ТАБЛИЦЫ: True ===")
         else:
-            logger.error("Ошибка создания таблицы в ClickHouse")
-            
-        return success
+            logger.error("=== ОШИБКА СОЗДАНИЯ ТАБЛИЦЫ В CLICKHOUSE ===")
+            logger.info("=== РЕЗУЛЬТАТ СОЗДАНИЯ ТАБЛИЦЫ: False ===")
         
-    except Exception as e:
-        logger.error(f"Ошибка при создании таблицы: {{e}}")
+        return table_creation_success
+        
+    except Exception:
+        logger.error("Ошибка при создании таблицы в ClickHouse")
+        logger.info("=== РЕЗУЛЬТАТ СОЗДАНИЯ ТАБЛИЦЫ: False ===")
         return False
 
 with DAG(

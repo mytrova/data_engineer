@@ -34,10 +34,25 @@ class PreviewSink(DataSink):
 
     def write(self, headers: List[str], rows):
         preview_rows: List[List[Any]] = []
-        for idx, row in enumerate(rows):
-            if idx >= self.max_rows:
-                break
-            preview_rows.append(list(row))
+        try:
+            # Преобразуем rows в список, если это итератор
+            rows_list = list(rows) if hasattr(rows, '__iter__') and not isinstance(rows, (list, tuple)) else rows
+            
+            for idx, row in enumerate(rows_list):
+                if idx >= self.max_rows:
+                    break
+                # Преобразуем row в список, если это не список
+                if hasattr(row, '__iter__') and not isinstance(row, (list, tuple)):
+                    preview_rows.append(list(row))
+                else:
+                    preview_rows.append(list(row) if isinstance(row, (list, tuple)) else [row])
+        except Exception as e:
+            # Если произошла ошибка, возвращаем пустой результат
+            import logging
+            logger = logging.getLogger(__name__)
+            logger.error(f"Ошибка в PreviewSink: {e}")
+            preview_rows = []
+        
         return {"headers": headers, "rows": preview_rows}
 
 
@@ -742,41 +757,66 @@ async def transfer_to_database(
         else:
             return JSONResponse({"error": f"Неподдерживаемый источник: {source_type}"}, status_code=400)
         
-        # Создаем приёмник данных
-        if database_type.lower() == "postgresql":
-            if not sink_connection_string or not sink_table_name:
-                return JSONResponse({"error": "Для PostgreSQL приёмника нужны connection_string и table_name"}, status_code=400)
-            sink = PostgreSQLSink(sink_connection_string, sink_table_name, sink_mode)
-        elif database_type.lower() == "clickhouse":
-            if not all([sink_host, sink_port, sink_database, sink_username, sink_password, sink_table_name]):
-                return JSONResponse({"error": "Для ClickHouse приёмника нужны все параметры подключения"}, status_code=400)
-            
-            # Логируем параметры ClickHouse для отладки
-            logger.info(f"ClickHouse parameters: host={sink_host}, port={sink_port}, database={sink_database}, username={sink_username}, table={sink_table_name}")
-            
-            try:
-                sink = ClickHouseSink(sink_host, int(sink_port), sink_database, sink_username, sink_password, sink_table_name, sink_mode)
-            except Exception as e:
-                logger.error(f"Ошибка создания ClickHouse sink: {e}")
-                return JSONResponse({"error": f"Не удалось подключиться к ClickHouse: {str(e)}"}, status_code=500)
-        elif database_type.lower() == "kafka":
-            if not all([sink_bootstrap_servers, sink_topic]):
-                return JSONResponse({"error": "Для Kafka приёмника нужны bootstrap_servers и topic"}, status_code=400)
-            sink = KafkaSink(sink_bootstrap_servers, sink_topic, sink_key_field)
-        else:
-            return JSONResponse({"error": f"Неподдерживаемый тип базы данных: {database_type}"}, status_code=400)
-        
         # Выполняем перенос данных
         if sink_mode == "preview":
-            # Для предпросмотра используем PreviewSink
+            # Для предпросмотра используем PreviewSink (приёмник не нужен)
             preview_sink = PreviewSink(max_rows=10)
             result = preview_sink.write(source.headers(), source.read())
+            
+            # Преобразуем все объекты в сериализуемые типы
+            def serialize_data(data):
+                """Рекурсивно преобразует данные в JSON-сериализуемые типы"""
+                from datetime import datetime, date, time
+                import decimal
+                
+                if isinstance(data, (datetime, date, time)):
+                    return data.isoformat()
+                elif isinstance(data, decimal.Decimal):
+                    return float(data)
+                elif isinstance(data, list):
+                    return [serialize_data(item) for item in data]
+                elif isinstance(data, dict):
+                    return {key: serialize_data(value) for key, value in data.items()}
+                elif hasattr(data, '__dict__'):
+                    # Для объектов с атрибутами преобразуем в строку
+                    return str(data)
+                else:
+                    return data
+            
+            # Сериализуем результат
+            serialized_result = serialize_data(result)
+            serialized_headers = serialize_data(source.headers())
+            
             return JSONResponse({
                 "status": "success",
-                "result": result,
-                "headers": source.headers()
+                "result": serialized_result,
+                "headers": serialized_headers
             })
         else:
+            # Создаем приёмник данных только для реального переноса
+            if database_type.lower() == "postgresql":
+                if not sink_connection_string or not sink_table_name:
+                    return JSONResponse({"error": "Для PostgreSQL приёмника нужны connection_string и table_name"}, status_code=400)
+                sink = PostgreSQLSink(sink_connection_string, sink_table_name, sink_mode)
+            elif database_type.lower() == "clickhouse":
+                if not all([sink_host, sink_port, sink_database, sink_username, sink_password, sink_table_name]):
+                    return JSONResponse({"error": "Для ClickHouse приёмника нужны все параметры подключения"}, status_code=400)
+                
+                # Логируем параметры ClickHouse для отладки
+                logger.info(f"ClickHouse parameters: host={sink_host}, port={sink_port}, database={sink_database}, username={sink_username}, table={sink_table_name}")
+                
+                try:
+                    sink = ClickHouseSink(sink_host, int(sink_port), sink_database, sink_username, sink_password, sink_table_name, sink_mode)
+                except Exception as e:
+                    logger.error(f"Ошибка создания ClickHouse sink: {e}")
+                    return JSONResponse({"error": f"Не удалось подключиться к ClickHouse: {str(e)}"}, status_code=500)
+            elif database_type.lower() == "kafka":
+                if not all([sink_bootstrap_servers, sink_topic]):
+                    return JSONResponse({"error": "Для Kafka приёмника нужны bootstrap_servers и topic"}, status_code=400)
+                sink = KafkaSink(sink_bootstrap_servers, sink_topic, sink_key_field)
+            else:
+                return JSONResponse({"error": f"Неподдерживаемый тип базы данных: {database_type}"}, status_code=400)
+            
             # Записываем данные в базу
             result = sink.write_chunks(source.headers(), source.read_in_chunks(chunk_size))
             return JSONResponse({

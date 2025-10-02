@@ -47,7 +47,11 @@ class TypeAnalyzer:
             # Проверяем целые числа
             if analysis["is_integer"]:
                 try:
-                    int(str_value)
+                    int_val = int(str_value)
+                    # Проверяем, помещается ли число в диапазон INTEGER PostgreSQL
+                    # INTEGER в PostgreSQL: от -2,147,483,648 до 2,147,483,647
+                    if int_val < -2147483648 or int_val > 2147483647:
+                        analysis["is_integer"] = False
                 except ValueError:
                     analysis["is_integer"] = False
             
@@ -77,7 +81,22 @@ class TypeAnalyzer:
         if analysis["is_boolean"]:
             return {"type": "BOOLEAN", "nullable": analysis["nullable"]}
         elif analysis["is_integer"]:
-            return {"type": "INTEGER", "nullable": analysis["nullable"]}
+            # Проверяем, нужен ли BIGINT
+            needs_bigint = False
+            
+            for value in non_null_data:
+                try:
+                    int_val = int(str(value).strip())
+                    if int_val < -2147483648 or int_val > 2147483647:
+                        needs_bigint = True
+                        break
+                except ValueError:
+                    pass
+            
+            if needs_bigint:
+                return {"type": "BIGINT", "nullable": analysis["nullable"]}
+            else:
+                return {"type": "INTEGER", "nullable": analysis["nullable"]}
         elif analysis["is_float"]:
             return {"type": "NUMERIC", "nullable": analysis["nullable"]}
         elif analysis["is_timestamp"]:
@@ -87,8 +106,10 @@ class TypeAnalyzer:
         else:
             # Текстовый тип
             max_len = analysis["max_length"]
-            if max_len <= 255:
-                return {"type": "VARCHAR", "max_length": max_len, "nullable": analysis["nullable"]}
+            # Увеличиваем размер VARCHAR для безопасности (добавляем запас)
+            varchar_size = min(max_len * 2, 1000)  # Удваиваем размер, но не более 1000
+            if varchar_size <= 1000:
+                return {"type": "VARCHAR", "max_length": varchar_size, "nullable": analysis["nullable"]}
             else:
                 return {"type": "TEXT", "nullable": analysis["nullable"]}
     
@@ -187,7 +208,8 @@ class TypeAnalyzer:
         Returns:
             Строка с типом PostgreSQL
         """
-        pg_type = analysis["type"]
+        # Поддерживаем как "type", так и "data_type" для совместимости
+        pg_type = analysis.get("type") or analysis.get("data_type")
         
         if pg_type == "VARCHAR" and "max_length" in analysis:
             return f"VARCHAR({analysis['max_length']})"
@@ -195,6 +217,8 @@ class TypeAnalyzer:
             return "NUMERIC"
         elif pg_type == "INTEGER":
             return "INTEGER"
+        elif pg_type == "BIGINT":
+            return "BIGINT"
         elif pg_type == "BOOLEAN":
             return "BOOLEAN"
         elif pg_type == "DATE":
