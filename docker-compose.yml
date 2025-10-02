@@ -8,6 +8,7 @@ services:
       - "8000:8000"
     environment:
       - UVICORN_WORKERS=1
+      - CHUTES_API_TOKEN=${CHUTES_API_TOKEN}
     depends_on:
       - postgres
     volumes:

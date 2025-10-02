@@ -4,7 +4,6 @@
 import re
 from typing import Any, List, Dict, Optional
 from datetime import datetime
-import pandas as pd
 
 
 class TypeAnalyzer:
@@ -151,20 +150,21 @@ class TypeAnalyzer:
         return False
     
     @staticmethod
-    def analyze_dataframe_schema(df: pd.DataFrame) -> List[Dict[str, Any]]:
+    def analyze_dataframe_schema(data: List[Dict[str, Any]], headers: List[str]) -> List[Dict[str, Any]]:
         """
-        Анализирует DataFrame и возвращает схему с типами данных
+        Анализирует данные и возвращает схему с типами данных
         
         Args:
-            df: DataFrame для анализа
+            data: Список словарей с данными
+            headers: Список заголовков столбцов
             
         Returns:
             Список словарей с информацией о столбцах
         """
         schema = []
         
-        for column in df.columns:
-            column_data = df[column].tolist()
+        for column in headers:
+            column_data = [row.get(column) for row in data if column in row]
             column_analysis = TypeAnalyzer.analyze_column_data(column_data)
             
             schema.append({

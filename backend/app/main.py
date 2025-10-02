@@ -25,6 +25,7 @@ from .services.airflow_client import airflow_client
 from .services.airflow_dag_generator_simple import AirflowDAGGeneratorSimple
 from .services.sqlite_service import sqlite_service
 from .services.large_file_processor import large_file_processor
+from .services.llm_service import llm_service
 
 
 class PreviewSink(DataSink):
@@ -58,6 +59,15 @@ class DAGGenerationRequest(BaseModel):
     sink_config: Dict[str, Any]
     chunk_size: int
     total_rows: Optional[int] = None
+
+class LLMMessageRequest(BaseModel):
+    message: str
+
+class DataAnalysisRequest(BaseModel):
+    source_schema: Dict[str, Any]
+    sink_schema: Dict[str, Any]
+    source_type: str
+    sink_type: str
 
 # CORS (allow frontend origin configured via env in docker-compose)
 app.add_middleware(
@@ -740,7 +750,15 @@ async def transfer_to_database(
         elif database_type.lower() == "clickhouse":
             if not all([sink_host, sink_port, sink_database, sink_username, sink_password, sink_table_name]):
                 return JSONResponse({"error": "Для ClickHouse приёмника нужны все параметры подключения"}, status_code=400)
-            sink = ClickHouseSink(sink_host, int(sink_port), sink_database, sink_username, sink_password, sink_table_name, sink_mode)
+            
+            # Логируем параметры ClickHouse для отладки
+            logger.info(f"ClickHouse parameters: host={sink_host}, port={sink_port}, database={sink_database}, username={sink_username}, table={sink_table_name}")
+            
+            try:
+                sink = ClickHouseSink(sink_host, int(sink_port), sink_database, sink_username, sink_password, sink_table_name, sink_mode)
+            except Exception as e:
+                logger.error(f"Ошибка создания ClickHouse sink: {e}")
+                return JSONResponse({"error": f"Не удалось подключиться к ClickHouse: {str(e)}"}, status_code=500)
         elif database_type.lower() == "kafka":
             if not all([sink_bootstrap_servers, sink_topic]):
                 return JSONResponse({"error": "Для Kafka приёмника нужны bootstrap_servers и topic"}, status_code=400)
@@ -1575,5 +1593,121 @@ async def delete_large_file_process(process_id: str):
         return JSONResponse({
             "status": "error",
             "error": f"Ошибка при удалении процесса: {str(e)}"
+        }, status_code=500)
+
+
+# ===== LLM API ENDPOINTS =====
+
+@app.post("/llm/ask")
+async def ask_llm(request: LLMMessageRequest):
+    """Отправка сообщения в LLM и получение ответа"""
+    try:
+        response = await llm_service.ask(request.message)
+        return JSONResponse({
+            "status": "success",
+            "response": response
+        })
+    except Exception as e:
+        import traceback
+        error_details = traceback.format_exc()
+        logger.error(f"=== ОШИБКА В LLM API ===")
+        logger.error(f"Ошибка: {str(e)}")
+        logger.error(f"Детали: {error_details}")
+        return JSONResponse({
+            "status": "error",
+            "error": f"Ошибка при обращении к LLM: {str(e)}"
+        }, status_code=500)
+
+
+@app.post("/llm/analyze-data")
+async def analyze_data_structure(request: DataAnalysisRequest):
+    """Анализ структуры данных для переноса через LLM"""
+    try:
+        logger.info(f"=== НАЧАЛО АНАЛИЗА ДАННЫХ ===")
+        logger.info(f"Источник: {request.source_type}")
+        logger.info(f"Приёмник: {request.sink_type}")
+        logger.info(f"Размер схемы источника: {len(str(request.source_schema))} символов")
+        logger.info(f"Размер схемы приёмника: {len(str(request.sink_schema))} символов")
+        prompt = f"""Проанализируй структуру данных для переноса и дай краткие рекомендации.
+
+ИСТОЧНИК ({request.source_type}):
+{request.source_schema}
+
+ПРИЁМНИК ({request.sink_type}):
+{request.sink_schema}
+
+КРИТИЧЕСКИ ВАЖНО:
+- НЕ повторяй структуру таблиц в ответе
+- НЕ включай исходные данные или схемы
+- НЕ создавай инфографику о таблицах
+- НЕ используй ASCII-диаграммы или таблицы
+- НЕ создавай таблицы в ответе
+- НЕ используй форматирование таблиц
+- ТОЛЬКО plain text в ответе
+- Дай только краткие выводы и рекомендации
+- Будь конкретным и лаконичным
+
+Ответь в следующем формате:
+
+# 📊 Анализ структуры данных
+
+## 🔍 Совместимость структур
+- Кратко опиши совместимость полей и типов
+- Укажи основные проблемы с типами
+
+## 🔄 Необходимые преобразования
+- Какие преобразования типов нужны
+- Краткие рекомендации по конвертации
+
+## 📈 Рекомендации по агрегации
+- Нужны ли агрегации (да/нет и почему)
+- Какие группировки рекомендованы
+
+## 🎯 Правильность выбора БД приёмника
+- Оцени выбор БД (хорошо/плохо и почему)
+- Альтернативы (если есть)
+
+## ⚠️ Потенциальные проблемы
+- Основные риски при переносе
+- Критические предупреждения
+
+## 🚀 Рекомендации по оптимизации
+- Ключевые советы по улучшению
+- Оптимизация производительности
+
+ПРАВИЛА ОТВЕТА:
+- Максимум 3-4 предложения на раздел
+- НЕ повторяй исходные таблицы
+- НЕ создавай инфографику или диаграммы
+- НЕ используй ASCII-таблицы
+- НЕ создавай таблицы в ответе
+- НЕ используй форматирование таблиц
+- ТОЛЬКО plain text формат
+- Будь конкретным и практичным
+- Используй эмодзи для структуры
+- Отвечай на русском языке"""
+
+        logger.info(f"Размер промпта: {len(prompt)} символов")
+        logger.info(f"Отправляем запрос в LLM...")
+        
+        response = await llm_service.ask(prompt)
+        
+        logger.info(f"=== ОТВЕТ ОТ LLM ПОЛУЧЕН ===")
+        logger.info(f"Analysis response length: {len(response)} characters")
+        logger.info(f"Analysis response preview: {response[:200]}...")
+        
+        return JSONResponse({
+            "status": "success",
+            "analysis": response
+        })
+    except Exception as e:
+        import traceback
+        error_details = traceback.format_exc()
+        logger.error(f"=== ОШИБКА В АНАЛИЗЕ ДАННЫХ ===")
+        logger.error(f"Ошибка: {str(e)}")
+        logger.error(f"Детали: {error_details}")
+        return JSONResponse({
+            "status": "error",
+            "error": f"Ошибка при анализе данных: {str(e)}"
         }, status_code=500)
 

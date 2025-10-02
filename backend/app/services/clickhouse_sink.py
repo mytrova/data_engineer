@@ -29,7 +29,7 @@ class ClickHouseSink(DataSink):
     
     def _get_base_url(self) -> str:
         """Получает базовый URL для ClickHouse HTTP API"""
-        return f"http://{self.username}:{self.password}@{self.host}:{self.port}/{self.database}"
+        return f"http://{self.host}:{self.port}"
     
     def write(self, headers: Sequence[str], rows: Iterable[Sequence[Any]]) -> Any:
         """Запись данных в таблицу"""
@@ -51,9 +51,12 @@ class ClickHouseSink(DataSink):
                     if value is None:
                         escaped_row.append("NULL")
                     elif isinstance(value, str):
-                        # Экранируем специальные символы
-                        escaped_value = str(value).replace("'", "''").replace("\\", "\\\\")
-                        escaped_row.append(f"'{escaped_value}'")
+                        # Экранируем специальные символы и обрабатываем пустые строки
+                        if value == '':
+                            escaped_row.append("''")
+                        else:
+                            escaped_value = str(value).replace("'", "''").replace("\\", "\\\\")
+                            escaped_row.append(f"'{escaped_value}'")
                     else:
                         escaped_row.append(str(value))
                 
@@ -63,7 +66,14 @@ class ClickHouseSink(DataSink):
             columns = ", ".join(headers)
             insert_query = f"INSERT INTO {self.table_name} ({columns}) VALUES {', '.join(values)}"
             
-            response = requests.post(f"{self._get_base_url()}/", data=insert_query)
+            # Используем правильную аутентификацию для ClickHouse
+            auth = (self.username, self.password)
+            params = {'database': self.database}
+            
+            response = requests.post(f"{self._get_base_url()}/", 
+                                  data=insert_query, 
+                                  auth=auth, 
+                                  params=params)
             
             if response.status_code == 200:
                 return {
@@ -103,9 +113,12 @@ class ClickHouseSink(DataSink):
                         if value is None:
                             escaped_row.append("NULL")
                         elif isinstance(value, str):
-                            # Экранируем специальные символы
-                            escaped_value = str(value).replace("'", "''").replace("\\", "\\\\")
-                            escaped_row.append(f"'{escaped_value}'")
+                            # Экранируем специальные символы и обрабатываем пустые строки
+                            if value == '':
+                                escaped_row.append("''")
+                            else:
+                                escaped_value = str(value).replace("'", "''").replace("\\", "\\\\")
+                                escaped_row.append(f"'{escaped_value}'")
                         else:
                             escaped_row.append(str(value))
                     
@@ -115,7 +128,14 @@ class ClickHouseSink(DataSink):
                 columns = ", ".join(headers)
                 insert_query = f"INSERT INTO {self.table_name} ({columns}) VALUES {', '.join(values)}"
                 
-                response = requests.post(f"{self._get_base_url()}/", data=insert_query)
+                # Используем правильную аутентификацию для ClickHouse
+                auth = (self.username, self.password)
+                params = {'database': self.database}
+                
+                response = requests.post(f"{self._get_base_url()}/", 
+                                      data=insert_query, 
+                                      auth=auth, 
+                                      params=params)
                 
                 if response.status_code != 200:
                     return {
@@ -144,7 +164,18 @@ class ClickHouseSink(DataSink):
     def test_connection(self) -> bool:
         """Тестирование подключения"""
         try:
-            response = requests.get(f"{self._get_base_url()}/", params={'query': 'SELECT 1'})
+            url = f"{self._get_base_url()}/"
+            logger.info(f"Testing ClickHouse connection to: {url}")
+            
+            # Используем правильную аутентификацию для ClickHouse
+            auth = (self.username, self.password)
+            params = {
+                'query': 'SELECT 1',
+                'database': self.database
+            }
+            
+            response = requests.get(url, params=params, auth=auth, timeout=10)
+            logger.info(f"ClickHouse connection response: {response.status_code}")
             return response.status_code == 200
         except Exception as e:
             logger.error(f"Ошибка подключения к ClickHouse: {e}")
@@ -154,7 +185,9 @@ class ClickHouseSink(DataSink):
         """Получение списка таблиц"""
         try:
             query = "SHOW TABLES"
-            response = requests.get(f"{self._get_base_url()}/", params={'query': query})
+            auth = (self.username, self.password)
+            params = {'query': query, 'database': self.database}
+            response = requests.get(f"{self._get_base_url()}/", params=params, auth=auth)
             
             if response.status_code == 200:
                 lines = response.text.strip().split('\n')
@@ -177,10 +210,11 @@ class ClickHouseSink(DataSink):
                 # Определяем тип ClickHouse
                 ch_type = self._get_clickhouse_type(col_type)
                 
-                # Добавляем NULL/NOT NULL
-                null_constraint = "" if nullable else " NOT NULL"
+                # В ClickHouse все поля nullable по умолчанию, используем Nullable() для nullable полей
+                if nullable:
+                    ch_type = f"Nullable({ch_type})"
                 
-                columns_sql.append(f"`{col_name}` {ch_type}{null_constraint}")
+                columns_sql.append(f"`{col_name}` {ch_type}")
             
             # Создаем SQL запрос
             create_sql = f"""
@@ -190,7 +224,14 @@ class ClickHouseSink(DataSink):
             ORDER BY tuple()
             """
             
-            response = requests.post(f"{self._get_base_url()}/", data=create_sql)
+            # Используем правильную аутентификацию для ClickHouse
+            auth = (self.username, self.password)
+            params = {'database': self.database}
+            
+            response = requests.post(f"{self._get_base_url()}/", 
+                                  data=create_sql, 
+                                  auth=auth, 
+                                  params=params)
             
             return response.status_code == 200
             

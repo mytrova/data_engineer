@@ -5,7 +5,6 @@ from typing import Any, Dict, List, Optional
 from sqlalchemy import create_engine, text, MetaData, Table, Column, String, Integer
 from sqlalchemy.engine import Engine
 from sqlalchemy.exc import SQLAlchemyError
-import pandas as pd
 
 
 class DatabaseConnection(ABC):
